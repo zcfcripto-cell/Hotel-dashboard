@@ -3,7 +3,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-# Configuração da página
 st.set_page_config(
     page_title="Análise de Inquéritos de Satisfação - Hotel Alísios",
     layout="wide",
@@ -11,7 +10,6 @@ st.set_page_config(
 )
 
 
-# Carregar dados
 @st.cache_data
 def load_data():
   file_path = "Dashboard_Satisfacao_Cliente_Corrigido.xlsx"
@@ -23,7 +21,6 @@ def load_data():
 
 df = load_data()
 
-# Identificar colunas base de metadados e agregados
 reserved_raw_cols = [
     "Data",
     "Ano",
@@ -40,23 +37,21 @@ reserved_raw_cols = [
     "Geral_Pct",
 ]
 
-# Identificar colunas originais de rubricas (escala 1-5)
 item_cols = [
     c
     for c in df.columns
     if c not in reserved_raw_cols and not c.endswith("_Pct")
 ]
 
-# Processar rubricas para percentagem (0-100%)
 for col in item_cols:
   pct_col_name = f"{col}_Pct"
   if pct_col_name not in df.columns:
-    df[pct_col_name] = (df[col] / 5.0) * 100.0
+    df[pct_col_name] = (
+        df[col] * 20.0 if df[col].max() <= 5.0 else df[col].astype(float)
+    )
 
-# Taxa de resposta por inquérito
 df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100.0
 
-# Garantir o cálculo da Satisfação Global (0-100%) com normalização de escala
 pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
 if "Geral_Pct" in df.columns:
   max_val = df["Geral_Pct"].max()
@@ -67,14 +62,12 @@ if "Geral_Pct" in df.columns:
 else:
   df["Geral_Pct"] = df[pct_rubric_cols].mean(axis=1)
 
-# Título Principal
 st.title("Análise de Inquéritos de Satisfação")
 st.markdown(
     "Hotel Alísios — Gestão dinâmica de inquéritos, objetivos, evolução"
     " temporal detalhada e análise por secção."
 )
 
-# --- BARRA LATERAL (FILTROS) ---
 st.sidebar.header("Filtros de Segmentação")
 
 anos_disponiveis = sorted(df["Ano"].dropna().unique())
@@ -138,22 +131,37 @@ if "Quarto" in df_filtered.columns:
 
 st.sidebar.markdown("---")
 st.sidebar.header("🎯 Gestão de Objetivos (%)")
-objetivo_geral = st.sidebar.slider(
-    "Objetivo Global de Satisfação (%)", 50.0, 100.0, 90.0, 1.0
+
+if "objetivo_geral" not in st.session_state:
+  st.session_state.objetivo_geral = 90.0
+if "objetivo_taxa_resp" not in st.session_state:
+  st.session_state.objetivo_taxa_resp = 75.0
+
+st.sidebar.slider(
+    "Objetivo Global de Satisfação (%)",
+    50.0,
+    100.0,
+    key="objetivo_geral",
+    step=1.0,
 )
-objetivo_taxa_resp = st.sidebar.slider(
-    "Objetivo de Taxa de Resposta (%)", 50.0, 100.0, 75.0, 1.0
+st.sidebar.slider(
+    "Objetivo de Taxa de Resposta (%)",
+    50.0,
+    100.0,
+    key="objetivo_taxa_resp",
+    step=1.0,
 )
 
 st.sidebar.markdown("### Objetivos por Rubrica")
 objetivos_especificos = {}
 for col in item_cols:
   nome_limpo = col.replace("_Pct", "")
+  if nome_limpo not in st.session_state:
+    st.session_state[nome_limpo] = 90.0
   objetivos_especificos[nome_limpo] = st.sidebar.slider(
-      f"Meta: {nome_limpo[:25]}...", 50.0, 100.0, 90.0, 1.0
+      f"Meta: {nome_limpo[:25]}...", 50.0, 100.0, key=nome_limpo, step=1.0
   )
 
-# --- CARTÃO DE FILTRO ---
 anos_str = (
     ", ".join(map(str, anos_selecionados))
     if anos_selecionados
@@ -164,7 +172,6 @@ st.info(
     f"📅 **Período Selecionado:** Anos: `{anos_str}` | Meses: `{meses_str}`"
 )
 
-# --- CONTA-ROTAÇÕES GLOBAIS ---
 total_inqueritos = len(df_filtered)
 if not df_filtered.empty:
   satisfacao_geral = df_filtered["Geral_Pct"].mean()
@@ -188,7 +195,7 @@ with col_gauge1:
           mode="gauge+number+delta",
           value=satisfacao_geral,
           delta={
-              "reference": objetivo_geral,
+              "reference": st.session_state.objetivo_geral,
               "relative": False,
               "valueformat": "+.1f",
           },
@@ -198,13 +205,19 @@ with col_gauge1:
               "axis": {"range": [0, 100], "tickwidth": 1},
               "bar": {"color": "#1f77b4"},
               "steps": [
-                  {"range": [0, objetivo_geral], "color": "#ffcccc"},
-                  {"range": [objetivo_geral, 100], "color": "#c6efce"},
+                  {
+                      "range": [0, st.session_state.objetivo_geral],
+                      "color": "#ffcccc",
+                  },
+                  {
+                      "range": [st.session_state.objetivo_geral, 100],
+                      "color": "#c6efce",
+                  },
               ],
               "threshold": {
                   "line": {"color": "red", "width": 4},
                   "thickness": 0.8,
-                  "value": objetivo_geral,
+                  "value": st.session_state.objetivo_geral,
               },
           },
       )
@@ -218,7 +231,7 @@ with col_gauge2:
           mode="gauge+number+delta",
           value=taxa_resposta_media,
           delta={
-              "reference": objetivo_taxa_resp,
+              "reference": st.session_state.objetivo_taxa_resp,
               "relative": False,
               "valueformat": "+.1f",
           },
@@ -228,13 +241,19 @@ with col_gauge2:
               "axis": {"range": [0, 100], "tickwidth": 1},
               "bar": {"color": "#2ca02c"},
               "steps": [
-                  {"range": [0, objetivo_taxa_resp], "color": "#ffcccc"},
-                  {"range": [objetivo_taxa_resp, 100], "color": "#c6efce"},
+                  {
+                      "range": [0, st.session_state.objetivo_taxa_resp],
+                      "color": "#ffcccc",
+                  },
+                  {
+                      "range": [st.session_state.objetivo_taxa_resp, 100],
+                      "color": "#c6efce",
+                  },
               ],
               "threshold": {
                   "line": {"color": "red", "width": 4},
                   "thickness": 0.8,
-                  "value": objetivo_taxa_resp,
+                  "value": st.session_state.objetivo_taxa_resp,
               },
           },
       )
@@ -244,7 +263,6 @@ with col_gauge2:
 
 st.markdown("---")
 
-# --- ANÁLISE TEMPORAL ---
 st.subheader("📈 Evolução Temporal de Indicadores")
 if not df_filtered.empty and "Data" in df_filtered.columns:
   temporal_options = ["Geral_Pct"] + pct_rubric_cols
@@ -276,9 +294,9 @@ if not df_filtered.empty and "Data" in df_filtered.columns:
 
   nome_limpo = indicador_selecionado.replace("_Pct", "")
   obj_atual = (
-      objetivo_geral
+      st.session_state.objetivo_geral
       if nome_limpo in ["Geral", "Satisfação Global"]
-      else objetivos_especificos.get(nome_limpo, 90.0)
+      else st.session_state.get(nome_limpo, 90.0)
   )
   fig_temp.add_hline(
       y=obj_atual,
@@ -291,7 +309,6 @@ if not df_filtered.empty and "Data" in df_filtered.columns:
 
 st.markdown("---")
 
-# --- ANÁLISE POR SECÇÃO ---
 st.subheader("Análise por Secção")
 
 
@@ -302,7 +319,7 @@ def render_gauge_grid(cols_list, seccao_titulo):
     pct_col_name = f"{col}_Pct"
     val_g = df_filtered[pct_col_name].mean()
     if not pd.isna(val_g):
-      obj_val = objetivos_especificos.get(col, 90.0)
+      obj_val = st.session_state.get(col, 90.0)
       delta_calc = (val_g / obj_val) - 1
       valid_cols.append({
           "Rubrica": col,
@@ -390,7 +407,6 @@ for sec_nome, sec_colunas in seccoes.items():
   if sec_colunas:
     render_gauge_grid(sec_colunas, sec_nome)
 
-# EXPORTAÇÃO DE DADOS
 st.sidebar.markdown("---")
 st.sidebar.header("📥 Exportar Relatório")
 csv_data = df_filtered.to_csv(index=False).encode("utf-8")
@@ -401,6 +417,5 @@ st.sidebar.download_button(
     mime="text/csv",
 )
 
-# --- TABELA DE DADOS DETALHADA ---
 with st.expander("Ver dados detalhados filtrados"):
   st.dataframe(df_filtered)
