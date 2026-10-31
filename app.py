@@ -16,44 +16,55 @@ st.set_page_config(
 def load_data():
   file_path = "Dashboard_Satisfacao_Cliente_Corrigido.xlsx"
   df = pd.read_excel(file_path, sheet_name="Base de Dados", header=2)
+  if "Data" in df.columns:
+    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
   return df
 
 
 df = load_data()
 
 # Identificar colunas base de metadados e agregados
-non_rubric_cols = [
+reserved_raw_cols = [
     "Data",
     "Ano",
     "Mês",
     "Inq. Nº",
     "Nacionalidade",
     "Quarto",
+    "FO",
     "FO_Pct",
     "Quarto_Pct",
     "PA_Pct",
     "Rest_Pct",
+    "Geral",
     "Geral_Pct",
 ]
 
 # Identificar colunas originais de rubricas (escala 1-5)
-item_cols = [c for c in df.columns if c not in non_rubric_cols]
+item_cols = [
+    c
+    for c in df.columns
+    if c not in reserved_raw_cols and not c.endswith("_Pct")
+]
 
-# Garantir conversão para percentagem (0-100%) para cada rubrica
+# Processar rubricas para percentagem (0-100%)
 for col in item_cols:
   pct_col_name = f"{col}_Pct"
   if pct_col_name not in df.columns:
-    df[pct_col_name] = (df[col] / 5.0) * 100
-
-# Se a coluna Geral_Pct não existir ou não estiver em 0-100%, calcular a média das rubricas
-if "Geral_Pct" not in df.columns:
-  pct_cols = [f"{c}_Pct" for c in item_cols]
-  df["Geral_Pct"] = df[pct_cols].mean(axis=1)
-elif df["Geral_Pct"].max() <= 5.0:
-  df["Geral_Pct"] = (df["Geral_Pct"] / 5.0) * 100.0
+    df[pct_col_name] = (
+        df[col] * 20.0 if df[col].max() <= 5.0 else df[col].astype(float)
+    )
 
 # Taxa de resposta por inquérito
-df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100
+df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100.0
+
+# Garantir o cálculo da Satisfação Global (0-100%)
+pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
+if "Geral_Pct" in df.columns:
+  if df["Geral_Pct"].max() <= 5.0:
+    df["Geral_Pct"] = df["Geral_Pct"] * 20.0
+else:
+  df["Geral_Pct"] = df[pct_rubric_cols].mean(axis=1)
 
 # Título Principal
 st.title("Análise de Inquéritos de Satisfação")
@@ -62,7 +73,7 @@ st.markdown(
     " temporal detalhada e análise por secção."
 )
 
-# --- BARRA LATERAL (FILTROS E OBJETIVOS) ---
+# --- BARRA LATERAL (FILTROS) ---
 st.sidebar.header("Filtros de Segmentação")
 
 anos_disponiveis = sorted(df["Ano"].dropna().unique())
@@ -70,7 +81,9 @@ anos_selecionados = st.sidebar.multiselect(
     "Selecionar Anos", options=anos_disponiveis, default=anos_disponiveis
 )
 df_filtered = (
-    df[df["Ano"].isin(anos_selecionados)] if anos_selecionados else df
+    df[df["Ano"].isin(anos_selecionados)].copy()
+    if anos_selecionados
+    else df.copy()
 )
 
 meses_ordem = [
@@ -124,7 +137,6 @@ if "Quarto" in df_filtered.columns:
 
 st.sidebar.markdown("---")
 st.sidebar.header("🎯 Gestão de Objetivos (%)")
-
 objetivo_geral = st.sidebar.slider(
     "Objetivo Global de Satisfação (%)", 50.0, 100.0, 90.0, 1.0
 )
@@ -231,12 +243,13 @@ with col_gauge2:
 
 st.markdown("---")
 
-# --- ANÁLISE TEMPORAL PARA TODOS OS INDICADORES ---
+# --- ANÁLISE TEMPORAL ---
 st.subheader("📈 Evolução Temporal de Indicadores")
 if not df_filtered.empty and "Data" in df_filtered.columns:
+  temporal_options = ["Geral_Pct"] + pct_rubric_cols
   indicador_selecionado = st.selectbox(
       "Selecione o Indicador para Análise Temporal:",
-      options=["Geral_Pct"] + [f"{c}_Pct" for c in item_cols],
+      options=temporal_options,
       format_func=lambda x: "Satisfação Global (%)"
       if x == "Geral_Pct"
       else x.replace("_Pct", ""),
@@ -263,7 +276,7 @@ if not df_filtered.empty and "Data" in df_filtered.columns:
   nome_limpo = indicador_selecionado.replace("_Pct", "")
   obj_atual = (
       objetivo_geral
-      if nome_limpo == "Satisfação Global"
+      if nome_limpo in ["Geral", "Satisfação Global"]
       else objetivos_especificos.get(nome_limpo, 90.0)
   )
   fig_temp.add_hline(
@@ -308,11 +321,10 @@ def render_gauge_grid(cols_list, seccao_titulo):
     pct_col_name = f"{col}_Pct"
     val_g = df_filtered[pct_col_name].mean()
     if not pd.isna(val_g):
-      nome_limpo = col
-      obj_val = objetivos_especificos.get(nome_limpo, 90.0)
+      obj_val = objetivos_especificos.get(col, 90.0)
       delta_calc = (val_g / obj_val) - 1
       valid_cols.append({
-          "Rubrica": nome_limpo,
+          "Rubrica": col,
           "Media": val_g,
           "Objetivo": obj_val,
           "Delta": delta_calc,
