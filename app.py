@@ -89,7 +89,7 @@ if nacionalidades_selecionadas:
       df_filtered["Nacionalidade"].isin(nacionalidades_selecionadas)
   ]
 
-# MELHORIA 2: Filtro por Número de Quarto
+# Filtro por Número de Quarto
 if "Quarto" in df_filtered.columns:
   quartos_disponiveis = sorted([
       str(q) for q in df_filtered["Quarto"].dropna().unique()
@@ -215,12 +215,12 @@ col_gauge2.plotly_chart(fig_gauge_resp, use_container_width=True)
 
 st.markdown("---")
 
-# MELHORIA 1: EVOLUÇÃO TEMPORAL
+# EVOLUÇÃO TEMPORAL (Corrigido para 'ME')
 st.subheader("📈 Evolução Temporal da Satisfação e Inquéritos")
 if not df_filtered.empty and "Data" in df_filtered.columns:
   df_temp = (
       df_filtered.set_index("Data")
-      .resample("M")["Geral_Pct"]
+      .resample("ME")["Geral_Pct"]
       .mean()
       .reset_index()
   )
@@ -305,7 +305,7 @@ else:
 
 st.markdown("---")
 
-# MELHORIA 5: DISTRIBUIÇÃO DE NOTAS (1 a 5)
+# DISTRIBUIÇÃO DE NOTAS (1 a 5)
 st.subheader("📊 Distribuição de Avaliações por Nota (1 a 5)")
 if not df_filtered.empty:
   notas_data = []
@@ -433,7 +433,7 @@ for sec_nome, sec_colunas in seccoes.items():
   if sec_colunas:
     render_gauge_grid(sec_colunas, sec_nome)
 
-# MELHORIA 3: EXPORTAÇÃO DE DADOS
+# EXPORTAÇÃO DE DADOS
 st.sidebar.markdown("---")
 st.sidebar.header("📥 Exportar Relatório")
 csv_data = df_filtered.to_csv(index=False).encode("utf-8")
