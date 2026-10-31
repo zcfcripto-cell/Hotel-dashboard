@@ -215,22 +215,20 @@ if not df_filtered.empty:
     for idx, row in bottom_3.iterrows():
       st.warning(f"**{row['Rubrica']}**: {row['Media']:.1f}% de satisfação")
 
-  with st.info("Diagnóstico Executivo do Período Selecionado"):
-    if satisfacao_geral >= 95:
-      nivel = "Excelente desempenho operacional."
-    elif satisfacao_geral >= 90:
-      nivel = "Bom desempenho com margem para otimização."
-    else:
-      nivel = (
-          "Desempenho a necessitar de intervenção direta nos pontos críticos."
-      )
+  if satisfacao_geral >= 95:
+    nivel = "Excelente desempenho operacional."
+  elif satisfacao_geral >= 90:
+    nivel = "Bom desempenho com margem para otimização."
+  else:
+    nivel = "Desempenho a necessitar de intervenção direta nos pontos críticos."
 
-    fo_m = df_filtered["FO_Pct"].mean() * 100
-    quarto_m = df_filtered["Quarto_Pct"].mean() * 100
-    pa_m = df_filtered["PA_Pct"].mean() * 100
-    rest_m = df_filtered["Rest_Pct"].mean() * 100
+  fo_m = df_filtered["FO_Pct"].mean() * 100
+  quarto_m = df_filtered["Quarto_Pct"].mean() * 100
+  pa_m = df_filtered["PA_Pct"].mean() * 100
+  rest_m = df_filtered["Rest_Pct"].mean() * 100
 
-    st.write(f"""
+  st.info(f"""
+        **Diagnóstico Executivo do Período Selecionado:**
         * **Estado Geral:** O hotel regista **{satisfacao_geral:.1f}%** de satisfação ponderada e uma **taxa de resposta média de {taxa_resposta_media:.1f}%** — *{nivel}*
         * **Resumo por Departamentos:** Front-Office ({fo_m:.1f}%), Quartos ({quarto_m:.1f}%), Pequeno-Almoço ({pa_m:.1f}%), Restaurante/Bar ({rest_m:.1f}%).
         * **Recomendação Principal:** Focar os planos de melhoria operacional na rubrica **{bottom_3.iloc[0]['Rubrica']}** ({bottom_3.iloc[0]['Media']:.1f}%).
@@ -259,7 +257,6 @@ if not df_filtered.empty and len(medias_rubricas_grafico) > 0:
       by="Media", ascending=False
   )
 
-  # Apresentar em grelha de 2 colunas para ficarem todos visíveis simultaneamente
   cols_per_row = 2
   rows = [
       df_plot.iloc[i : i + cols_per_row]
