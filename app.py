@@ -437,18 +437,34 @@ st.sidebar.download_button(
 
 with st.expander("Ver dados detalhados filtrados"):
   st.dataframe(df_filtered)
-st.subheader("Matriz de Correlação")
+st.subheader("Matriz de Correlação das Rubricas")
 
-# Selecionar apenas as colunas numéricas
+# Selecionar apenas as colunas numéricas (excluindo colunas como 'Ano' se necessário)
 df_numerico = df.select_dtypes(include=['float64', 'int64'])
 
 if not df_numerico.empty:
     # Calcular a correlação
     corr = df_numerico.corr()
     
-    # Criar o gráfico
-    fig, ax = plt.subplots(figsize=(8, 6))
-    sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f", ax=ax, linewidths=0.5)
+    # Aumentar o tamanho da figura para dar espaço aos nomes compridos
+    fig, ax = plt.subplots(figsize=(12, 10))
+    
+    # Criar o mapa de calor sem os números dentro (annot=False) para evitar a sobreposição
+    sns.heatmap(
+        corr, 
+        annot=False,         # Retiramos os números para o gráfico ficar limpo
+        cmap='coolwarm', 
+        ax=ax, 
+        linewidths=0.5,
+        cbar_kws={'label': 'Nível de Correlação'}
+    )
+    
+    # Ajustar o tamanho e a rotação das legendas dos eixos
+    plt.xticks(rotation=45, ha='right', fontsize=9)
+    plt.yticks(fontsize=9)
+    
+    # Garantir que nada fica cortado
+    plt.tight_layout()
     
     # Mostrar no Streamlit
     st.pyplot(fig)
