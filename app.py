@@ -52,7 +52,7 @@ df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100
 st.title("Análise de Inquéritos de Satisfação")
 st.markdown("Hotel Alísios — Gestão dinâmica de inquéritos e desempenho.")
 
-# --- BARRA LATERAL (FILTROS MÚLTIPLOS E OBJETIVO) ---
+# --- BARRA LATERAL (FILTROS MÚLTIPLOS) ---
 st.sidebar.header("Filtros de Segmentação")
 
 # Filtro de Anos
@@ -64,7 +64,7 @@ df_filtered = (
     df[df["Ano"].isin(anos_selecionados)] if anos_selecionados else df
 )
 
-# Filtro de Meses (Corrigido para evitar conflito de estado)
+# Filtro de Meses
 meses_disponiveis = sorted(df_filtered["Mês"].dropna().unique())
 meses_selecionados = st.sidebar.multiselect(
     "Selecionar Meses", options=meses_disponiveis, default=meses_disponiveis
@@ -72,7 +72,7 @@ meses_selecionados = st.sidebar.multiselect(
 if meses_selecionados:
   df_filtered = df_filtered[df_filtered["Mês"].isin(meses_selecionados)]
 
-# Filtro de Nacionalidade (Corrigido para evitar conflito de estado)
+# Filtro de Nacionalidade
 nacionalidades_disponiveis = sorted(
     df_filtered["Nacionalidade"].dropna().unique()
 )
@@ -87,9 +87,9 @@ if nacionalidades_selecionadas:
   ]
 
 st.sidebar.markdown("---")
-st.sidebar.header("Meta / Objetivo de Satisfação")
-objetivo_global = st.sidebar.slider(
-    "Objetivo a Atingir (%)",
+st.sidebar.header("Objetivo Global de Base")
+objetivo_base_global = st.sidebar.slider(
+    "Objetivo Padrão (%)",
     min_value=50.0,
     max_value=100.0,
     value=90.0,
@@ -134,20 +134,24 @@ fig_gauge_sat = go.Figure(
     go.Indicator(
         mode="gauge+number+delta",
         value=satisfacao_geral,
-        delta={"reference": objetivo_global, "relative": False},
+        delta={
+            "reference": objetivo_base_global,
+            "relative": False,
+            "valueformat": ".1f",
+        },
         title={"text": "Satisfação Geral (%)", "font": {"size": 16}},
         number={"suffix": "%", "font": {"size": 24}},
         gauge={
             "axis": {"range": [0, 100], "tickwidth": 1},
             "bar": {"color": "#1f77b4"},
             "steps": [
-                {"range": [0, objetivo_global], "color": "#ffcccc"},
-                {"range": [objetivo_global, 100], "color": "#c6efce"},
+                {"range": [0, objetivo_base_global], "color": "#ffcccc"},
+                {"range": [objetivo_base_global, 100], "color": "#c6efce"},
             ],
             "threshold": {
                 "line": {"color": "red", "width": 4},
                 "thickness": 0.8,
-                "value": objetivo_global,
+                "value": objetivo_base_global,
             },
         },
     )
@@ -158,18 +162,27 @@ col_gauge1.plotly_chart(fig_gauge_sat, use_container_width=True)
 # 2º Conta-Rotações: Taxa de Resposta
 fig_gauge_resp = go.Figure(
     go.Indicator(
-        mode="gauge+number",
+        mode="gauge+number+delta",
         value=taxa_resposta_media,
+        delta={
+            "reference": 75.0,
+            "relative": False,
+            "valueformat": ".1f",
+        },  # Objetivo fixo de 75% para taxa de resposta
         title={"text": "Taxa de Resposta Média (%)", "font": {"size": 16}},
         number={"suffix": "%", "font": {"size": 24}},
         gauge={
             "axis": {"range": [0, 100], "tickwidth": 1},
             "bar": {"color": "#2ca02c"},
             "steps": [
-                {"range": [0, 50], "color": "#ff9999"},
-                {"range": [50, 75], "color": "#ffcc99"},
-                {"range": [75, 100], "color": "#99ff99"},
+                {"range": [0, 75], "color": "#ffcccc"},
+                {"range": [75, 100], "color": "#c6efce"},
             ],
+            "threshold": {
+                "line": {"color": "red", "width": 4},
+                "thickness": 0.8,
+                "value": 75.0,
+            },
         },
     )
 )
@@ -238,18 +251,43 @@ else:
 
 st.markdown("---")
 
-# --- PAINEL COMPLETO DE CONTA-ROTAÇÕES DE TODOS OS INDICADORES VISÍVEIS ---
-st.subheader(
-    f"Painel de Conta-Rotações de Todos os Indicadores (Objetivo:"
-    f" {objetivo_global:.0f}%)"
-)
+# --- PAINEL DE CONTA-ROTAÇÕES COM OBJETIVOS INDIVIDUAIS POR RUBRICA ---
+st.subheader("Painel de Conta-Rotações por Indicador (Com Objetivos Específicos)")
+
+# Dicionário de Objetivos Específicos por Rubrica (podes ajustar os valores livremente)
+objetivos_especificos = {
+    "Front-Office - Serviço e atendimento": 95.0,
+    "Front-Office - Apresentação dos colaboradores": 95.0,
+    "Quarto - Serviço e atendimento": 95.0,
+    "Quarto - Apresentação das colaboradoras": 95.0,
+    "Quarto - Limpeza": 96.0,
+    "Quarto - Resposta a avarias": 90.0,
+    "Pequeno-Almoço - Serviço e atendimento": 92.0,
+    "Pequeno-Almoço - Apresentação dos colaboradores": 95.0,
+    "Pequeno-Almoço - Variedade Buffet": 85.0,
+    "Pequeno-Almoço - Reposição Buffet": 92.0,
+    "Restaurante / Bar - Serviço e atendimento": 92.0,
+    "Restaurante / Bar - Apresentação dos colaboradores": 95.0,
+    "Restaurante / Bar - Comida": 90.0,
+    "Restaurante / Bar - Conforto": 90.0,
+    "Outros - Asseio  das Areas Publicas": 95.0,
+    "Piscina - Limpeza": 95.0,
+    "Limpeza do Acesso à Praia": 90.0,
+    "Serviço de Lavandaria": 90.0,
+    "Internet (wireless) - Acessibilidade": 85.0,
+    "Animação": 80.0,
+    "Preocupações Ambientais": 90.0,
+}
 
 medias_rubricas_grafico = []
 for col in item_cols:
   val_g = df_filtered[col + "_Pct"].mean()
   if not pd.isna(val_g):
+    nome_limpo = col.replace("_Pct", "")
+    # Atribui o objetivo específico do dicionário (ou o objetivo base se não estiver definido)
+    obj_val = objetivos_especificos.get(nome_limpo, objetivo_base_global)
     medias_rubricas_grafico.append(
-        {"Rubrica": col.replace("_Pct", ""), "Media": val_g}
+        {"Rubrica": nome_limpo, "Media": val_g, "Objetivo": obj_val}
     )
 
 if not df_filtered.empty and len(medias_rubricas_grafico) > 0:
@@ -268,34 +306,39 @@ if not df_filtered.empty and len(medias_rubricas_grafico) > 0:
     for i, (_, row_item) in enumerate(row_df.iterrows()):
       rubrica_nome = row_item["Rubrica"]
       valor_m = row_item["Media"]
+      obj_m = row_item["Objetivo"]
 
       fig_ind = go.Figure(
           go.Indicator(
               mode="gauge+number+delta",
               value=valor_m,
-              delta={"reference": objetivo_global, "relative": False},
-              title={"text": rubrica_nome, "font": {"size": 14}},
-              number={"suffix": "%", "font": {"size": 22}},
+              delta={
+                  "reference": obj_m,
+                  "relative": False,
+                  "valueformat": "+.1f",
+              },
+              title={
+                  "text": f"{rubrica_nome}<br><span style='font-size:11px;color:gray;'>Objetivo: {obj_m:.0f}%</span>",
+                  "font": {"size": 13},
+              },
+              number={"suffix": "%", "font": {"size": 20}},
               gauge={
                   "axis": {"range": [0, 100], "tickwidth": 1},
                   "bar": {"color": "#1f77b4"},
                   "steps": [
-                      {"range": [0, objetivo_global], "color": "#ffcccc"},
-                      {
-                          "range": [objetivo_global, 100],
-                          "color": "#c6efce",
-                      },
+                      {"range": [0, obj_m], "color": "#ffcccc"},
+                      {"range": [obj_m, 100], "color": "#c6efce"},
                   ],
                   "threshold": {
                       "line": {"color": "red", "width": 3},
                       "thickness": 0.8,
-                      "value": objetivo_global,
+                      "value": obj_m,
                   },
               },
           )
       )
       fig_ind.update_layout(
-          height=200, margin=dict(t=35, b=10, l=15, r=15)
+          height=210, margin=dict(t=45, b=10, l=15, r=15)
       )
       grid_cols[i].plotly_chart(fig_ind, use_container_width=True)
 
