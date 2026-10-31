@@ -1,5 +1,6 @@
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 # Configuração da página
@@ -44,30 +45,34 @@ for col in item_cols:
 
 st.title("Hotel Alísios — Dashboard Dinâmico de Satisfação")
 st.markdown(
-    "Indicadores de gestão e análise interativa dos inquéritos (Escala 0-100%)."
+    "Indicadores de gestão com seleção múltipla de datas e escalas (0-100%)."
 )
 
-# --- BARRA LATERAL (FILTROS) ---
-st.sidebar.header("Filtros de Segmentação")
+# --- BARRA LATERAL (FILTROS MÚLTIPLOS) ---
+st.sidebar.header("Filtros de Segmentação (Múltiplos)")
 
-# Filtro de Ano
-anos = sorted(df["Ano"].dropna().unique())
-ano_selecionado = st.sidebar.selectbox("Selecionar Ano", ["Todos"] + list(anos))
+# Filtro de Anos (Seleção Múltipla)
+anos_disponiveis = sorted(df["Ano"].dropna().unique())
+anos_selecionados = st.sidebar.multiselect(
+    "Selecionar Anos", options=anos_disponiveis, default=anos_disponiveis
+)
 
-if ano_selecionado != "Todos":
-  df_filtered = df[df["Ano"] == ano_selecionado]
+if anos_selecionados:
+  df_filtered = df[df["Ano"].isin(anos_selecionados)]
 else:
   df_filtered = df
 
-# Filtro de Mês
-meses = sorted(df_filtered["Mês"].dropna().unique())
-mes_selecionado = st.sidebar.selectbox("Selecionar Mês", ["Todos"] + list(meses))
+# Filtro de Meses (Seleção Múltipla)
+meses_disponiveis = sorted(df_filtered["Mês"].dropna().unique())
+meses_selecionados = st.sidebar.multiselect(
+    "Selecionar Meses", options=meses_disponiveis, default=meses_disponiveis
+)
 
-if mes_selecionado != "Todos":
-  df_filtered = df_filtered[df_filtered["Mês"] == mes_selecionado]
+if meses_selecionados:
+  df_filtered = df_filtered[df_filtered["Mês"].isin(meses_selecionados)]
 
-# --- MÉTRICAS PRINCIPAIS (KPIs) ---
-col1, col2, col3 = st.columns(3)
+# --- MÉTRICAS PRINCIPAIS & CONTA-ROTAÇÕES (GAUGE) ---
+st.subheader("Indicador Global (Conta-Rotações)")
 
 total_inqueritos = len(df_filtered)
 satisfacao_geral = (
@@ -76,79 +81,83 @@ satisfacao_geral = (
     else 0
 )
 
-col1.metric("Inquéritos Visíveis", f"{total_inqueritos}")
-col2.metric("Satisfação Geral Média", f"{satisfacao_geral:.1f}%")
+col1, col2 = st.columns([1, 2])
 
+col1.metric("Inquéritos Visíveis", f"{total_inqueritos}")
 if "Nacionalidade" in df_filtered.columns:
-  nacionalidades_unicas = df_filtered["Nacionalidade"].nunique()
-  col3.metric("Nacionalidades Diferentes", f"{nacionalidades_unicas}")
+  col1.metric(
+      "Nacionalidades Diferentes", f"{df_filtered['Nacionalidade'].nunique()}"
+  )
+
+# Criar Gráfico de Velocímetro (Gauge / Conta-Rotações)
+fig_gauge = go.Figure(
+    go.Indicator(
+        mode="gauge+number",
+        value=satisfacao_geral,
+        title={
+            "text": "Média de Satisfação Global (%)",
+            "font": {"size": 20},
+        },
+        number={"suffix": "%", "font": {"size": 30}},
+        gauge={
+            "axis": {"range": [0, 100], "tickwidth": 1},
+            "bar": {"color": "darkblue"},
+            "steps": [
+                {"range": [0, 60], "color": "#ff9999"},
+                {"range": [60, 80], "color": "#ffcc99"},
+                {"range": [80, 100], "color": "#99ff99"},
+            ],
+            "threshold": {
+                "line": {"color": "red", "width": 4},
+                "thickness": 0.75,
+                "value": 90,
+            },
+        },
+    )
+)
+fig_gauge.update_layout(height=250, margin=dict(t=30, b=10, l=30, r=30))
+col2.plotly_chart(fig_gauge, use_container_width=True)
 
 st.markdown("---")
 
-# --- GRÁFICO 1: DESEMPENHO POR DEPARTAMENTO ---
-st.subheader("Desempenho Médio por Departamento")
+# --- GRÁFICO DE VALORES MÉDIOS DE TODOS OS INDICADORES POR RUBRICA ---
+st.subheader("Valores Médios de Todos os Indicadores por Rubrica")
 
-colunas_pct = ["FO_Pct", "Quarto_Pct", "PA_Pct", "Rest_Pct"]
-nomes_pct = {
-    "FO_Pct": "Front-Office",
-    "Quarto_Pct": "Quarto",
-    "PA_Pct": "Pequeno-Almoço",
-    "Rest_Pct": "Restaurante/Bar",
-}
-
-medias_secções = []
-for col in colunas_pct:
-  if col in df_filtered.columns:
-    media = df_filtered[col].mean() * 100
-    medias_secções.append(
-        {"Secção": nomes_pct.get(col, col), "Satisfação (%)": media}
-    )
-
-df_secções = pd.DataFrame(medias_secções)
-
-if not df_secções.empty:
-  fig = px.bar(
-      df_secções,
-      x="Secção",
-      y="Satisfação (%)",
-      text="Satisfação (%)",
-      color="Secção",
-      title="Média de Satisfação por Categoria Principal",
-  )
-  fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-  fig.update_layout(yaxis=dict(range=[0, 100]), showlegend=False)
-  st.plotly_chart(fig, use_container_width=True)
-
-# --- GRÁFICO 2: EVOLUÇÃO ANUAL DA SATISFAÇÃO GERAL ---
-st.subheader("Evolução Histórica da Satisfação Geral")
-df_evolucao = df.groupby("Ano")["Geral_Pct"].mean() * 100
-df_evolucao = df_evolucao.reset_index()
-
-fig_evo = px.line(
-    df_evolucao,
-    x="Ano",
-    y="Geral_Pct",
-    markers=True,
-    title="Evolução da Satisfação Geral (%) ao Longo dos Anos",
-)
-fig_evo.update_traces(line=dict(width=3), marker=dict(size=8))
-fig_evo.update_layout(yaxis=dict(range=[80, 100]))
-st.plotly_chart(fig_evo, use_container_width=True)
-
-# --- TABELA DE RUBRICAS DETALHADAS ---
-st.subheader("Indicadores de Gestão por Rubrica (Média Geral)")
 medias_rubricas = []
 for col in item_cols:
-  media_val = df_filtered[col + "_Pct"].mean()
-  medias_rubricas.append(
-      {"Rubrica": col.replace("_Pct", ""), "Satisfação Média (%)": media_val}
-  )
+  if col + "_Pct" in df_filtered.columns:
+    media_val = df_filtered[col + "_Pct"].mean()
+    medias_rubricas.append(
+        {
+            "Rubrica": col.replace("_Pct", ""),
+            "Satisfação Média (%)": (
+                media_val if not pd.isna(media_val) else 0
+            ),
+        }
+    )
 
 df_rubricas = pd.DataFrame(medias_rubricas).sort_values(
-    by="Satisfação Média (%)", ascending=False
+    by="Satisfação Média (%)", ascending=True
 )
-st.dataframe(df_rubricas.style.format({"Satisfação Média (%)": "{:.1f}%"}))
 
-# --- TABELA DE DADOS BRUTOS ---
+if not df_rubricas.empty:
+  fig_rubricas = px.bar(
+      df_rubricas,
+      x="Satisfação Média (%)",
+      y="Rubrica",
+      orientation="h",
+      text="Satisfação Média (%)",
+      title=(
+          "Média de Satisfação por Rubrica (Filtrado por Anos/Meses"
+          " Selecionados)"
+      ),
+  )
+  fig_rubricas.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+  fig_rubricas.update_layout(
+      xaxis=dict(range=[0, 115]), height=700, yaxis=dict(dtick=1)
+  )
+  st.plotly_chart(fig_rubricas, use_container_width=True)
+
+# --- TABELA DE DADOS DETALHADA ---
 with st.expander("Ver dados detalhados filtrados"):
   st.dataframe(df_filtered)
