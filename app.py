@@ -21,7 +21,7 @@ def load_data():
 
 df = load_data()
 
-# Todas as colunas de rubricas
+# Identificar as colunas originais de perguntas/rubricas que estão na escala de 1 a 5
 item_cols = [
     c
     for c in df.columns
@@ -41,18 +41,20 @@ item_cols = [
     ]
 ]
 
-# Converter todas as rubricas de 1-5 para percentagem (0-100%)
+# Converter estritamente as colunas de 1 a 5 para percentagem (0-100%)
 for col in item_cols:
   df[col + "_Pct"] = (df[col] / 5.0) * 100
 
-# Taxa de resposta por inquérito
+# Taxa de resposta por inquérito (baseada no preenchimento das colunas de 1 a 5)
 df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100
 
 # Título Principal
 st.title("Análise de Inquéritos de Satisfação")
-st.markdown("Hotel Alísios — Gestão dinâmica de inquéritos e desempenho.")
+st.markdown(
+    "Hotel Alísios — Gestão dinâmica de inquéritos, objetivos e desempenho."
+)
 
-# --- BARRA LATERAL (FILTROS MÚLTIPLOS) ---
+# --- BARRA LATERAL (FILTROS MÚLTIPLOS E CONFIGURAÇÃO DE OBJETIVOS) ---
 st.sidebar.header("Filtros de Segmentação")
 
 # Filtro de Anos
@@ -87,14 +89,24 @@ if nacionalidades_selecionadas:
   ]
 
 st.sidebar.markdown("---")
-st.sidebar.header("Objetivo Global de Base")
-objetivo_base_global = st.sidebar.slider(
-    "Objetivo Padrão (%)",
-    min_value=50.0,
-    max_value=100.0,
-    value=90.0,
-    step=1.0,
+st.sidebar.header("🎯 Gestão de Objetivos (%)")
+
+# Objetivo Global de Satisfação
+objetivo_geral = st.sidebar.slider(
+    "Objetivo Global de Satisfação (%)", 50.0, 100.0, 90.0, 1.0
 )
+objetivo_taxa_resp = st.sidebar.slider(
+    "Objetivo de Taxa de Resposta (%)", 50.0, 100.0, 75.0, 1.0
+)
+
+st.sidebar.markdown("### Objetivos por Rubrica")
+# Dicionário interativo para definir objetivos individuais por rubrica na barra lateral
+objetivos_especificos = {}
+for col in item_cols:
+  nome_limpo = col.replace("_Pct", "")
+  objetivos_especificos[nome_limpo] = st.sidebar.slider(
+      f"Meta: {nome_limpo[:25]}...", 50.0, 100.0, 90.0, 1.0
+  )
 
 # --- CARTÃO COM ANOS E MESES FILTRADOS ---
 anos_str = (
@@ -135,9 +147,9 @@ fig_gauge_sat = go.Figure(
         mode="gauge+number+delta",
         value=satisfacao_geral,
         delta={
-            "reference": objetivo_base_global,
+            "reference": objetivo_geral,
             "relative": False,
-            "valueformat": ".1f",
+            "valueformat": "+.1f",
         },
         title={"text": "Satisfação Geral (%)", "font": {"size": 16}},
         number={"suffix": "%", "font": {"size": 24}},
@@ -145,13 +157,13 @@ fig_gauge_sat = go.Figure(
             "axis": {"range": [0, 100], "tickwidth": 1},
             "bar": {"color": "#1f77b4"},
             "steps": [
-                {"range": [0, objetivo_base_global], "color": "#ffcccc"},
-                {"range": [objetivo_base_global, 100], "color": "#c6efce"},
+                {"range": [0, objetivo_geral], "color": "#ffcccc"},
+                {"range": [objetivo_geral, 100], "color": "#c6efce"},
             ],
             "threshold": {
                 "line": {"color": "red", "width": 4},
                 "thickness": 0.8,
-                "value": objetivo_base_global,
+                "value": objetivo_geral,
             },
         },
     )
@@ -165,23 +177,23 @@ fig_gauge_resp = go.Figure(
         mode="gauge+number+delta",
         value=taxa_resposta_media,
         delta={
-            "reference": 75.0,
+            "reference": objetivo_taxa_resp,
             "relative": False,
-            "valueformat": ".1f",
-        },  # Objetivo fixo de 75% para taxa de resposta
+            "valueformat": "+.1f",
+        },
         title={"text": "Taxa de Resposta Média (%)", "font": {"size": 16}},
         number={"suffix": "%", "font": {"size": 24}},
         gauge={
             "axis": {"range": [0, 100], "tickwidth": 1},
             "bar": {"color": "#2ca02c"},
             "steps": [
-                {"range": [0, 75], "color": "#ffcccc"},
-                {"range": [75, 100], "color": "#c6efce"},
+                {"range": [0, objetivo_taxa_resp], "color": "#ffcccc"},
+                {"range": [objetivo_taxa_resp, 100], "color": "#c6efce"},
             ],
             "threshold": {
                 "line": {"color": "red", "width": 4},
                 "thickness": 0.8,
-                "value": 75.0,
+                "value": objetivo_taxa_resp,
             },
         },
     )
@@ -254,38 +266,13 @@ st.markdown("---")
 # --- PAINEL DE CONTA-ROTAÇÕES COM OBJETIVOS INDIVIDUAIS POR RUBRICA ---
 st.subheader("Painel de Conta-Rotações por Indicador (Com Objetivos Específicos)")
 
-# Dicionário de Objetivos Específicos por Rubrica (podes ajustar os valores livremente)
-objetivos_especificos = {
-    "Front-Office - Serviço e atendimento": 95.0,
-    "Front-Office - Apresentação dos colaboradores": 95.0,
-    "Quarto - Serviço e atendimento": 95.0,
-    "Quarto - Apresentação das colaboradoras": 95.0,
-    "Quarto - Limpeza": 96.0,
-    "Quarto - Resposta a avarias": 90.0,
-    "Pequeno-Almoço - Serviço e atendimento": 92.0,
-    "Pequeno-Almoço - Apresentação dos colaboradores": 95.0,
-    "Pequeno-Almoço - Variedade Buffet": 85.0,
-    "Pequeno-Almoço - Reposição Buffet": 92.0,
-    "Restaurante / Bar - Serviço e atendimento": 92.0,
-    "Restaurante / Bar - Apresentação dos colaboradores": 95.0,
-    "Restaurante / Bar - Comida": 90.0,
-    "Restaurante / Bar - Conforto": 90.0,
-    "Outros - Asseio  das Areas Publicas": 95.0,
-    "Piscina - Limpeza": 95.0,
-    "Limpeza do Acesso à Praia": 90.0,
-    "Serviço de Lavandaria": 90.0,
-    "Internet (wireless) - Acessibilidade": 85.0,
-    "Animação": 80.0,
-    "Preocupações Ambientais": 90.0,
-}
-
 medias_rubricas_grafico = []
 for col in item_cols:
   val_g = df_filtered[col + "_Pct"].mean()
   if not pd.isna(val_g):
     nome_limpo = col.replace("_Pct", "")
-    # Atribui o objetivo específico do dicionário (ou o objetivo base se não estiver definido)
-    obj_val = objetivos_especificos.get(nome_limpo, objetivo_base_global)
+    # Pega o objetivo configurado no slider lateral para esta rubrica específica
+    obj_val = objetivos_especificos.get(nome_limpo, 90.0)
     medias_rubricas_grafico.append(
         {"Rubrica": nome_limpo, "Media": val_g, "Objetivo": obj_val}
     )
