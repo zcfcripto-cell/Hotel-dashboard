@@ -70,15 +70,31 @@ st.markdown(
 
 st.sidebar.header("Filtros de Segmentação")
 
-anos_disponiveis = sorted(df["Ano"].dropna().unique())
+if "Data" in df.columns and not df["Data"].dropna().empty:
+  min_date = df["Data"].min().date()
+  max_date = df["Data"].max().date()
+  date_range = st.sidebar.date_input(
+      "Selecionar Intervalo de Datas",
+      value=(min_date, max_date),
+      min_value=min_date,
+      max_value=max_date,
+  )
+  if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
+    start_date, end_date = date_range
+    df_filtered = df[
+        (df["Data"].dt.date >= start_date) & (df["Data"].dt.date <= end_date)
+    ].copy()
+  else:
+    df_filtered = df.copy()
+else:
+  df_filtered = df.copy()
+
+anos_disponiveis = sorted(df_filtered["Ano"].dropna().unique())
 anos_selecionados = st.sidebar.multiselect(
     "Selecionar Anos", options=anos_disponiveis, default=anos_disponiveis
 )
-df_filtered = (
-    df[df["Ano"].isin(anos_selecionados)].copy()
-    if anos_selecionados
-    else df.copy()
-)
+if anos_selecionados:
+  df_filtered = df_filtered[df_filtered["Ano"].isin(anos_selecionados)]
 
 meses_ordem = [
     "Janeiro",
