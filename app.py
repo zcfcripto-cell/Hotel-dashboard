@@ -2,6 +2,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 st.set_page_config(
     page_title="Análise de Inquéritos de Satisfação - Hotel Alísios",
@@ -435,3 +437,20 @@ st.sidebar.download_button(
 
 with st.expander("Ver dados detalhados filtrados"):
   st.dataframe(df_filtered)
+st.subheader("Matriz de Correlação")
+
+# Selecionar apenas as colunas numéricas
+df_numerico = df.select_dtypes(include=['float64', 'int64'])
+
+if not df_numerico.empty:
+    # Calcular a correlação
+    corr = df_numerico.corr()
+    
+    # Criar o gráfico
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f", ax=ax, linewidths=0.5)
+    
+    # Mostrar no Streamlit
+    st.pyplot(fig)
+else:
+    st.warning("Não há colunas numéricas suficientes para calcular a correlação.")
