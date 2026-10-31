@@ -64,15 +64,15 @@ df_filtered = (
     df[df["Ano"].isin(anos_selecionados)] if anos_selecionados else df
 )
 
-# Filtro de Meses
+# Filtro de Meses (Corrigido para evitar conflito de estado)
 meses_disponiveis = sorted(df_filtered["Mês"].dropna().unique())
 meses_selecionados = st.sidebar.multiselect(
-    "Selecionar Meses", options=meses_disponiveis, default=meses_selecionados
+    "Selecionar Meses", options=meses_disponiveis, default=meses_disponiveis
 )
 if meses_selecionados:
   df_filtered = df_filtered[df_filtered["Mês"].isin(meses_selecionados)]
 
-# Filtro de Nacionalidade
+# Filtro de Nacionalidade (Corrigido para evitar conflito de estado)
 nacionalidades_disponiveis = sorted(
     df_filtered["Nacionalidade"].dropna().unique()
 )
