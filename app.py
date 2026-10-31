@@ -5,7 +5,7 @@ import streamlit as st
 
 # Configuração da página
 st.set_page_config(
-    page_title="Dashboard de Satisfação - Hotel Alísios",
+    page_title="Análise de Inquéritos de Satisfação - Hotel Alísios",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -21,7 +21,7 @@ def load_data():
 
 df = load_data()
 
-# Todas as colunas de rubricas para os gráficos
+# Todas as colunas de rubricas
 item_cols = [
     c
     for c in df.columns
@@ -45,37 +45,60 @@ item_cols = [
 for col in item_cols:
   df[col + "_Pct"] = (df[col] / 5.0) * 100
 
-st.title("Hotel Alísios — Dashboard Dinâmico de Satisfação")
-st.markdown(
-    "Indicadores de gestão com seleção múltipla de datas e análises"
-    " operacionais focadas."
-)
+# Taxa de resposta por inquérito
+df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100
+
+# Título Atualizado
+st.title("Análise de Inquéritos de Satisfação")
+st.markdown("Hotel Alísios — Gestão dinâmica de inquéritos e desempenho.")
 
 # --- BARRA LATERAL (FILTROS MÚLTIPLOS) ---
 st.sidebar.header("Filtros de Segmentação")
 
-# Filtro de Anos (Seleção Múltipla)
+# Filtro de Anos
 anos_disponiveis = sorted(df["Ano"].dropna().unique())
 anos_selecionados = st.sidebar.multiselect(
     "Selecionar Anos", options=anos_disponiveis, default=anos_disponiveis
 )
+df_filtered = (
+    df[df["Ano"].isin(anos_selecionados)] if anos_selecionados else df
+)
 
-if anos_selecionados:
-  df_filtered = df[df["Ano"].isin(anos_selecionados)]
-else:
-  df_filtered = df
-
-# Filtro de Meses (Seleção Múltipla)
+# Filtro de Meses
 meses_disponiveis = sorted(df_filtered["Mês"].dropna().unique())
 meses_selecionados = st.sidebar.multiselect(
     "Selecionar Meses", options=meses_disponiveis, default=meses_disponiveis
 )
-
 if meses_selecionados:
   df_filtered = df_filtered[df_filtered["Mês"].isin(meses_selecionados)]
 
-# --- MÉTRICAS PRINCIPAIS & CONTA-ROTAÇÕES ---
-st.subheader("Indicador Global (Conta-Rotações)")
+# Filtro de Nacionalidade (NOVO)
+nacionalidades_disponiveis = sorted(
+    df_filtered["Nacionalidade"].dropna().unique()
+)
+nacionalidades_selecionadas = st.sidebar.multiselect(
+    "Selecionar Nacionalidades",
+    options=nacionalidades_disponiveis,
+    default=nacionalidades_disponiveis,
+)
+if nacionalidades_selecionadas:
+  df_filtered = df_filtered[
+      df_filtered["Nacionalidade"].isin(nacionalidades_selecionadas)
+  ]
+
+# --- CARTÃO COM ANOS E MESES FILTRADOS (NOVO) ---
+anos_str = (
+    ", ".join(map(str, anos_selecionados))
+    if anos_selecionados
+    else "Todos"
+)
+meses_str = ", ".join(meses_selecionados) if meses_selecionados else "Todos"
+st.info(
+    f"📅 **Período Selecionado:** Anos: `{anos_str}` | Meses: `{meses_str}`"
+)
+
+# --- MÉTRICAS & MÉDIA GLOBAL (CONTA-ROTAÇÕES) ---
+st.subheader("Média Global")
 
 total_inqueritos = len(df_filtered)
 satisfacao_geral = (
@@ -83,25 +106,31 @@ satisfacao_geral = (
     if not df_filtered.empty
     else 0
 )
+taxa_resposta_media = (
+    df_filtered["Taxa_Resposta_Inquerito"].mean()
+    if not df_filtered.empty
+    else 0
+)
 
-col1, col2 = st.columns([1, 2])
+col_metricas, col_gauge1, col_gauge2 = st.columns([1, 1.5, 1.5])
 
-col1.metric("Inquéritos Analisados", f"{total_inqueritos}")
-if "Nacionalidade" in df_filtered.columns:
-  col1.metric(
-      "Nacionalidades Diferentes", f"{df_filtered['Nacionalidade'].nunique()}"
-  )
+with col_metricas:
+  st.metric("Inquéritos Analisados", f"{total_inqueritos}")
+  if "Nacionalidade" in df_filtered.columns:
+    st.metric(
+        "Nacionalidades", f"{df_filtered['Nacionalidade'].nunique()}"
+    )
 
-# Gráfico de Velocímetro (Gauge / Conta-Rotações)
-fig_gauge = go.Figure(
+# 1º Conta-Rotações: Satisfação Geral
+fig_gauge_sat = go.Figure(
     go.Indicator(
         mode="gauge+number",
         value=satisfacao_geral,
         title={
-            "text": "Média de Satisfação Global (%)",
-            "font": {"size": 20},
+            "text": "Média de Satisfação (%)",
+            "font": {"size": 16},
         },
-        number={"suffix": "%", "font": {"size": 30}},
+        number={"suffix": "%", "font": {"size": 24}},
         gauge={
             "axis": {"range": [0, 100], "tickwidth": 1},
             "bar": {"color": "#1f77b4"},
@@ -110,24 +139,42 @@ fig_gauge = go.Figure(
                 {"range": [75, 90], "color": "#ffcc99"},
                 {"range": [90, 100], "color": "#99ff99"},
             ],
-            "threshold": {
-                "line": {"color": "darkgreen", "width": 4},
-                "thickness": 0.75,
-                "value": 95,
-            },
         },
     )
 )
-fig_gauge.update_layout(height=240, margin=dict(t=30, b=10, l=30, r=30))
-col2.plotly_chart(fig_gauge, use_container_width=True)
+fig_gauge_sat.update_layout(height=220, margin=dict(t=30, b=10, l=20, r=20))
+col_gauge1.plotly_chart(fig_gauge_sat, use_container_width=True)
+
+# 2º Conta-Rotações: Taxa de Resposta
+fig_gauge_resp = go.Figure(
+    go.Indicator(
+        mode="gauge+number",
+        value=taxa_resposta_media,
+        title={
+            "text": "Taxa de Resposta Média (%)",
+            "font": {"size": 16},
+        },
+        number={"suffix": "%", "font": {"size": 24}},
+        gauge={
+            "axis": {"range": [0, 100], "tickwidth": 1},
+            "bar": {"color": "#2ca02c"},
+            "steps": [
+                {"range": [0, 50], "color": "#ff9999"},
+                {"range": [50, 75], "color": "#ffcc99"},
+                {"range": [75, 100], "color": "#99ff99"},
+            ],
+        },
+    )
+)
+fig_gauge_resp.update_layout(height=220, margin=dict(t=30, b=10, l=20, r=20))
+col_gauge2.plotly_chart(fig_gauge_resp, use_container_width=True)
 
 st.markdown("---")
 
-# --- CONCLUSÕES AUTOMÁTICAS E DIAGNÓSTICO DE GESTÃO (Excluindo Apresentação nas Análises) ---
+# --- CONCLUSÕES AUTOMÁTICAS E DIAGNÓSTICO DE GESTÃO ---
 st.subheader("Conclusões Automatizadas & Análise de Gestão")
 
 if not df_filtered.empty:
-  # Filtrar rubricas que NÃO são de apresentação para as conclusões textuais
   item_cols_analise = [
       c
       for c in item_cols
@@ -161,7 +208,6 @@ if not df_filtered.empty:
     for idx, row in bottom_3.iterrows():
       st.warning(f"**{row['Rubrica']}**: {row['Media']:.1f}% de satisfação")
 
-  # Caixa de Diagnóstico Geral
   with st.info("Diagnóstico Executivo do Período Selecionado"):
     if satisfacao_geral >= 95:
       nivel = "Excelente desempenho operacional."
@@ -178,7 +224,7 @@ if not df_filtered.empty:
     rest_m = df_filtered["Rest_Pct"].mean() * 100
 
     st.write(f"""
-        * **Estado Geral:** O hotel regista **{satisfacao_geral:.1f}%** de satisfação ponderada — *{nivel}*
+        * **Estado Geral:** O hotel regista **{satisfacao_geral:.1f}%** de satisfação ponderada e uma **taxa de resposta média de {taxa_resposta_media:.1f}%** — *{nivel}*
         * **Resumo por Departamentos:** Front-Office ({fo_m:.1f}%), Quartos ({quarto_m:.1f}%), Pequeno-Almoço ({pa_m:.1f}%), Restaurante/Bar ({rest_m:.1f}%).
         * **Recomendação Principal:** Focar os planos de melhoria operacional na rubrica **{bottom_3.iloc[0]['Rubrica']}** ({bottom_3.iloc[0]['Media']:.1f}%).
         """)
@@ -187,7 +233,7 @@ else:
 
 st.markdown("---")
 
-# --- GRÁFICO DE VALORES MÉDIOS DE TODOS OS INDICADORES (Com todas as rubricas) ---
+# --- GRÁFICO DE BARRAS DE TODAS AS RUBRICAS ---
 st.subheader("Valores Médios de Todos os Indicadores por Rubrica")
 
 medias_rubricas_grafico = []
@@ -208,9 +254,7 @@ if not df_filtered.empty and len(medias_rubricas_grafico) > 0:
       y="Rubrica",
       orientation="h",
       text="Media",
-      title=(
-          "Média de Satisfação por Rubrica (Incluindo Todas as Rubricas)"
-      ),
+      title="Média de Satisfação por Rubrica (Todas as Rubricas)",
       color="Media",
       color_continuous_scale="RdYlGn",
   )
@@ -222,6 +266,62 @@ if not df_filtered.empty and len(medias_rubricas_grafico) > 0:
       coloraxis_showscale=False,
   )
   st.plotly_chart(fig_rubricas, use_container_width=True)
+
+st.markdown("---")
+
+# --- CONTA-ROTAÇÕES INDIVIDUAL POR INDICADOR COM OBJETIVO (NOVO) ---
+st.subheader("Conta-Rotações Detalhado por Indicador com Objetivo")
+
+objetivo_global = st.slider(
+    "Definir Objetivo Global a Atingir (%) para todos os indicadores",
+    min_value=50.0,
+    max_value=100.0,
+    value=90.0,
+    step=1.0,
+)
+
+if not df_plot.empty:
+  # Selecionar rubrica para visualizar no conta-rotações detalhado
+  rubrica_escolhida = st.selectbox(
+      "Selecionar Indicador / Rubrica para Analisar no Conta-Rotações",
+      options=df_plot["Rubrica"].tolist(),
+  )
+
+  # Obter o valor médio da rubrica escolhida
+  valor_rubrica = df_plot.loc[
+      df_plot["Rubrica"] == rubrica_escolhida, "Media"
+  ].values[0]
+
+  fig_ind = go.Figure(
+      go.Indicator(
+          mode="gauge+number+delta",
+          value=valor_rubrica,
+          delta={"reference": objetivo_global, "relative": False},
+          title={
+              "text": f"Indicador: {rubrica_escolhida}",
+              "font": {"size": 18},
+          },
+          number={"suffix": "%", "font": {"size": 28}},
+          gauge={
+              "axis": {"range": [0, 100], "tickwidth": 1},
+              "bar": {"color": "darkblue"},
+              "steps": [
+                  {"range": [0, objetivo_global], "color": "#ffcccc"},
+                  {
+                      "range": [objetivo_global, 100],
+                      "color": "#c6efce",
+                  },
+              ],
+              "threshold": {
+                  "line": {"color": "red", "width": 4},
+                  "thickness": 0.8,
+                  "value": objetivo_global,
+              },
+          },
+      )
+  )
+  fig_ind.update_layout(height=300, margin=dict(t=40, b=20, l=30, r=30))
+  st.plotly_chart(fig_ind, use_container_width=True)
 
 # --- TABELA DE DADOS DETALHADA ---
 with st.expander("Ver dados detalhados filtrados"):
