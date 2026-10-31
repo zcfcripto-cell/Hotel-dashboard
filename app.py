@@ -21,7 +21,7 @@ def load_data():
 
 df = load_data()
 
-# Identificar as colunas originais de perguntas/rubricas que estão na escala de 1 a 5
+# Identificar estritamente as colunas originais de perguntas/rubricas (escala 1-5)
 item_cols = [
     c
     for c in df.columns
@@ -41,17 +41,18 @@ item_cols = [
     ]
 ]
 
-# Converter estritamente as colunas de 1 a 5 para percentagem (0-100%)
+# Converter colunas de 1 a 5 para percentagem (0-100%)
 for col in item_cols:
   df[col + "_Pct"] = (df[col] / 5.0) * 100
 
-# Taxa de resposta por inquérito (baseada no preenchimento das colunas de 1 a 5)
+# Taxa de resposta por inquérito
 df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100
 
 # Título Principal
 st.title("Análise de Inquéritos de Satisfação")
 st.markdown(
-    "Hotel Alísios — Gestão dinâmica de inquéritos, objetivos e desempenho."
+    "Hotel Alísios — Gestão dinâmica de inquéritos, objetivos, evolução"
+    " temporal e análise detalhada."
 )
 
 # --- BARRA LATERAL (FILTROS MÚLTIPLOS E CONFIGURAÇÃO DE OBJETIVOS) ---
@@ -88,10 +89,22 @@ if nacionalidades_selecionadas:
       df_filtered["Nacionalidade"].isin(nacionalidades_selecionadas)
   ]
 
+# MELHORIA 2: Filtro por Número de Quarto
+if "Quarto" in df_filtered.columns:
+  quartos_disponiveis = sorted([
+      str(q) for q in df_filtered["Quarto"].dropna().unique()
+  ])
+  quartos_selecionados = st.sidebar.multiselect(
+      "Filtrar por Quarto", options=quartos_disponiveis
+  )
+  if quartos_selecionados:
+    df_filtered = df_filtered[
+        df_filtered["Quarto"].astype(str).isin(quartos_selecionados)
+    ]
+
 st.sidebar.markdown("---")
 st.sidebar.header("🎯 Gestão de Objetivos (%)")
 
-# Objetivo Global de Satisfação
 objetivo_geral = st.sidebar.slider(
     "Objetivo Global de Satisfação (%)", 50.0, 100.0, 90.0, 1.0
 )
@@ -100,7 +113,6 @@ objetivo_taxa_resp = st.sidebar.slider(
 )
 
 st.sidebar.markdown("### Objetivos por Rubrica")
-# Dicionário interativo para definir objetivos individuais por rubrica na barra lateral
 objetivos_especificos = {}
 for col in item_cols:
   nome_limpo = col.replace("_Pct", "")
@@ -203,6 +215,36 @@ col_gauge2.plotly_chart(fig_gauge_resp, use_container_width=True)
 
 st.markdown("---")
 
+# MELHORIA 1: EVOLUÇÃO TEMPORAL
+st.subheader("📈 Evolução Temporal da Satisfação e Inquéritos")
+if not df_filtered.empty and "Data" in df_filtered.columns:
+  df_temp = (
+      df_filtered.set_index("Data")
+      .resample("M")["Geral_Pct"]
+      .mean()
+      .reset_index()
+  )
+  df_temp["Satisfação Geral (%)"] = df_temp["Geral_Pct"] * 100
+
+  fig_temp = px.line(
+      df_temp,
+      x="Data",
+      y="Satisfação Geral (%)",
+      markers=True,
+      title="Evolução Mensal da Satisfação Geral (%)",
+      line_shape="spline",
+  )
+  fig_temp.add_hline(
+      y=objetivo_geral,
+      line_dash="dash",
+      line_color="red",
+      annotation_text=f"Objetivo ({objetivo_geral:.0f}%)",
+  )
+  fig_temp.update_layout(height=300, yaxis=dict(range=[50, 105]))
+  st.plotly_chart(fig_temp, use_container_width=True)
+
+st.markdown("---")
+
 # --- CONCLUSÕES AUTOMÁTICAS E DIAGNÓSTICO DE GESTÃO ---
 st.subheader("Conclusões Automatizadas & Análise de Gestão")
 
@@ -263,73 +305,144 @@ else:
 
 st.markdown("---")
 
-# --- PAINEL DE CONTA-ROTAÇÕES COM OBJETIVOS INDIVIDUAIS POR RUBRICA ---
-st.subheader("Painel de Conta-Rotações por Indicador (Com Objetivos Específicos)")
+# MELHORIA 5: DISTRIBUIÇÃO DE NOTAS (1 a 5)
+st.subheader("📊 Distribuição de Avaliações por Nota (1 a 5)")
+if not df_filtered.empty:
+  notas_data = []
+  for col in item_cols:
+    counts = df_filtered[col].value_counts()
+    for nota in range(1, 6):
+      notas_data.append({
+          "Rubrica": col,
+          "Nota": f"Nota {nota}",
+          "Quantidade": counts.get(nota, 0),
+      })
 
-medias_rubricas_grafico = []
-for col in item_cols:
-  val_g = df_filtered[col + "_Pct"].mean()
-  if not pd.isna(val_g):
-    nome_limpo = col.replace("_Pct", "")
-    # Pega o objetivo configurado no slider lateral para esta rubrica específica
-    obj_val = objetivos_especificos.get(nome_limpo, 90.0)
-    medias_rubricas_grafico.append(
-        {"Rubrica": nome_limpo, "Media": val_g, "Objetivo": obj_val}
-    )
-
-if not df_filtered.empty and len(medias_rubricas_grafico) > 0:
-  df_plot = pd.DataFrame(medias_rubricas_grafico).sort_values(
-      by="Media", ascending=False
+  df_dist = pd.DataFrame(notas_data)
+  fig_dist = px.bar(
+      df_dist,
+      x="Quantidade",
+      y="Rubrica",
+      color="Nota",
+      orientation="h",
+      title="Proporção de Respostas por Nota (1 a 5)",
+      color_discrete_map={
+          "Nota 5": "#2ca02c",
+          "Nota 4": "#98df8a",
+          "Nota 3": "#ffbb78",
+          "Nota 2": "#ff7f0e",
+          "Nota 1": "#d62728",
+      },
   )
-
-  cols_per_row = 2
-  rows = [
-      df_plot.iloc[i : i + cols_per_row]
-      for i in range(0, len(df_plot), cols_per_row)
-  ]
-
-  for row_df in rows:
-    grid_cols = st.columns(len(row_df))
-    for i, (_, row_item) in enumerate(row_df.iterrows()):
-      rubrica_nome = row_item["Rubrica"]
-      valor_m = row_item["Media"]
-      obj_m = row_item["Objetivo"]
-
-      fig_ind = go.Figure(
-          go.Indicator(
-              mode="gauge+number+delta",
-              value=valor_m,
-              delta={
-                  "reference": obj_m,
-                  "relative": False,
-                  "valueformat": "+.1f",
-              },
-              title={
-                  "text": f"{rubrica_nome}<br><span style='font-size:11px;color:gray;'>Objetivo: {obj_m:.0f}%</span>",
-                  "font": {"size": 13},
-              },
-              number={"suffix": "%", "font": {"size": 20}},
-              gauge={
-                  "axis": {"range": [0, 100], "tickwidth": 1},
-                  "bar": {"color": "#1f77b4"},
-                  "steps": [
-                      {"range": [0, obj_m], "color": "#ffcccc"},
-                      {"range": [obj_m, 100], "color": "#c6efce"},
-                  ],
-                  "threshold": {
-                      "line": {"color": "red", "width": 3},
-                      "thickness": 0.8,
-                      "value": obj_m,
-                  },
-              },
-          )
-      )
-      fig_ind.update_layout(
-          height=210, margin=dict(t=45, b=10, l=15, r=15)
-      )
-      grid_cols[i].plotly_chart(fig_ind, use_container_width=True)
+  fig_dist.update_layout(height=600, barmode="stack")
+  st.plotly_chart(fig_dist, use_container_width=True)
 
 st.markdown("---")
+
+# --- PAINEL DE CONTA-ROTAÇÕES ORGANIZADO POR SECÇÃO ---
+st.subheader("Painel de Conta-Rotações Organizado por Secção")
+
+seccoes = {
+    "Front-Office": [
+        c for c in item_cols if c.startswith("Front-Office -")
+    ],
+    "Quartos": [c for c in item_cols if c.startswith("Quarto -")],
+    "Pequeno-Almoço": [
+        c for c in item_cols if c.startswith("Pequeno-Almoço -")
+    ],
+    "Restaurante / Bar": [
+        c for c in item_cols if c.startswith("Restaurante / Bar -")
+    ],
+    "Outros Serviços e Instalações": [
+        c
+        for c in item_cols
+        if not c.startswith(
+            ("Front-Office -", "Quarto -", "Pequeno-Almoço -", "Restaurante / Bar -")
+        )
+    ],
+}
+
+
+def render_gauge_grid(cols_list, seccao_titulo):
+  st.markdown(f"### 🏨 Secção: {seccao_titulo}")
+  valid_cols = []
+  for col in cols_list:
+    val_g = df_filtered[col + "_Pct"].mean()
+    if not pd.isna(val_g):
+      nome_limpo = col.replace("_Pct", "")
+      obj_val = objetivos_especificos.get(nome_limpo, 90.0)
+      valid_cols.append(
+          {"Rubrica": nome_limpo, "Media": val_g, "Objetivo": obj_val}
+      )
+
+  if valid_cols:
+    df_sec = pd.DataFrame(valid_cols)
+    cols_per_row = 2
+    rows = [
+        df_sec.iloc[i : i + cols_per_row]
+        for i in range(0, len(df_sec), cols_per_row)
+    ]
+
+    for row_df in rows:
+      grid_cols = st.columns(len(row_df))
+      for i, (_, row_item) in enumerate(row_df.iterrows()):
+        rubrica_nome = row_item["Rubrica"]
+        valor_m = row_item["Media"]
+        obj_m = row_item["Objetivo"]
+
+        fig_ind = go.Figure(
+            go.Indicator(
+                mode="gauge+number+delta",
+                value=valor_m,
+                delta={
+                    "reference": obj_m,
+                    "relative": False,
+                    "valueformat": "+.1f",
+                },
+                title={
+                    "text": f"{rubrica_nome}<br><span style='font-size:11px;color:gray;'>Objetivo: {obj_m:.0f}%</span>",
+                    "font": {"size": 13},
+                },
+                number={"suffix": "%", "font": {"size": 20}},
+                gauge={
+                    "axis": {"range": [0, 100], "tickwidth": 1},
+                    "bar": {"color": "#1f77b4"},
+                    "steps": [
+                        {"range": [0, obj_m], "color": "#ffcccc"},
+                        {
+                            "range": [obj_m, 100],
+                            "color": "#c6efce",
+                        },
+                    ],
+                    "threshold": {
+                        "line": {"color": "red", "width": 3},
+                        "thickness": 0.8,
+                        "value": obj_m,
+                    },
+                },
+            )
+        )
+        fig_ind.update_layout(
+            height=210, margin=dict(t=45, b=10, l=15, r=15)
+        )
+        grid_cols[i].plotly_chart(fig_ind, use_container_width=True)
+  st.markdown("---")
+
+
+for sec_nome, sec_colunas in seccoes.items():
+  if sec_colunas:
+    render_gauge_grid(sec_colunas, sec_nome)
+
+# MELHORIA 3: EXPORTAÇÃO DE DADOS
+st.sidebar.markdown("---")
+st.sidebar.header("📥 Exportar Relatório")
+csv_data = df_filtered.to_csv(index=False).encode("utf-8")
+st.sidebar.download_button(
+    label="Descarregar Dados Filtrados (CSV)",
+    data=csv_data,
+    file_name="relatorio_satisfacao_hotel_alisios.csv",
+    mime="text/csv",
+)
 
 # --- TABELA DE DADOS DETALHADA ---
 with st.expander("Ver dados detalhados filtrados"):
