@@ -14,7 +14,7 @@ st.title("Dashboard de Operações - Hotel Alísios")
 def carregar_dados():
     # Substitua "dados_satisfacao.csv" pelo nome exato do seu ficheiro de dados se for diferente
     try:
-        return pd.read_csv("dados_satisfacao.csv")
+        return Dashboard_Satisfacao_Cliente_Corrigido.xlsx
     except FileNotFoundError:
         return None
 
