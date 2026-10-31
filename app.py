@@ -155,16 +155,12 @@ st.info(
 
 # --- CONTA-ROTAÇÕES GLOBAIS ---
 total_inqueritos = len(df_filtered)
-satisfacao_geral = (
-    df_filtered["Geral_Pct"].mean() * 100
-    if not df_filtered.empty
-    else 0
-)
-taxa_resposta_media = (
-    df_filtered["Taxa_Resposta_Inquerito"].mean()
-    if not df_filtered.empty
-    else 0
-)
+if not df_filtered.empty:
+  satisfacao_geral = df_filtered["Geral_Pct"].mean()
+  taxa_resposta_media = df_filtered["Taxa_Resposta_Inquerito"].mean()
+else:
+  satisfacao_geral = 0
+  taxa_resposta_media = 0
 
 col_metricas, col_gauge1, col_gauge2 = st.columns([1, 1.5, 1.5])
 
