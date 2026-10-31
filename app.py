@@ -21,7 +21,7 @@ def load_data():
 
 df = load_data()
 
-# Mapeamento de colunas de rubricas
+# Todas as colunas de rubricas para os gráficos
 item_cols = [
     c
     for c in df.columns
@@ -47,8 +47,8 @@ for col in item_cols:
 
 st.title("Hotel Alísios — Dashboard Dinâmico de Satisfação")
 st.markdown(
-    "Indicadores de gestão com seleção múltipla de datas e diagnósticos"
-    " automáticos."
+    "Indicadores de gestão com seleção múltipla de datas e análises"
+    " operacionais focadas."
 )
 
 # --- BARRA LATERAL (FILTROS MÚLTIPLOS) ---
@@ -123,20 +123,26 @@ col2.plotly_chart(fig_gauge, use_container_width=True)
 
 st.markdown("---")
 
-# --- NOVO CAMPO: CONCLUSÕES AUTOMÁTICAS E DIAGNÓSTICO DE GESTÃO ---
+# --- CONCLUSÕES AUTOMÁTICAS E DIAGNÓSTICO DE GESTÃO (Excluindo Apresentação nas Análises) ---
 st.subheader("Conclusões Automatizadas & Análise de Gestão")
 
 if not df_filtered.empty:
-  # Calcular médias de todas as rubricas
-  medias_rubricas = []
-  for col in item_cols:
+  # Filtrar rubricas que NÃO são de apresentação para as conclusões textuais
+  item_cols_analise = [
+      c
+      for c in item_cols
+      if "apresentação" not in c.lower() and "apresentacao" not in c.lower()
+  ]
+
+  medias_rubricas_analise = []
+  for col in item_cols_analise:
     val = df_filtered[col + "_Pct"].mean()
     if not pd.isna(val):
-      medias_rubricas.append(
+      medias_rubricas_analise.append(
           {"Rubrica": col.replace("_Pct", ""), "Media": val}
       )
 
-  df_rank = pd.DataFrame(medias_rubricas).sort_values(
+  df_rank = pd.DataFrame(medias_rubricas_analise).sort_values(
       by="Media", ascending=False
   )
 
@@ -146,12 +152,12 @@ if not df_filtered.empty:
   col_a, col_b = st.columns(2)
 
   with col_a:
-    st.markdown("### Pontos Fortes (Destaques Positivos)")
+    st.markdown("### Pontos Fortes (Análise Operacional)")
     for idx, row in top_3.iterrows():
       st.success(f"**{row['Rubrica']}**: {row['Media']:.1f}% de satisfação")
 
   with col_b:
-    st.markdown("### Oportunidades de Melhoria (Atenção)")
+    st.markdown("### Oportunidades de Melhoria (Análise Operacional)")
     for idx, row in bottom_3.iterrows():
       st.warning(f"**{row['Rubrica']}**: {row['Media']:.1f}% de satisfação")
 
@@ -174,18 +180,26 @@ if not df_filtered.empty:
     st.write(f"""
         * **Estado Geral:** O hotel regista **{satisfacao_geral:.1f}%** de satisfação ponderada — *{nivel}*
         * **Resumo por Departamentos:** Front-Office ({fo_m:.1f}%), Quartos ({quarto_m:.1f}%), Pequeno-Almoço ({pa_m:.1f}%), Restaurante/Bar ({rest_m:.1f}%).
-        * **Recomendação Principal:** Manter o excelente nível de serviço do Front-Office e focar esforços de melhoria na rubrica **{bottom_3.iloc[0]['Rubrica']}** ({bottom_3.iloc[0]['Media']:.1f}%).
+        * **Recomendação Principal:** Focar os planos de melhoria operacional na rubrica **{bottom_3.iloc[0]['Rubrica']}** ({bottom_3.iloc[0]['Media']:.1f}%).
         """)
 else:
   st.warning("Sem dados disponíveis para a seleção efetuada.")
 
 st.markdown("---")
 
-# --- GRÁFICO DE VALORES MÉDIOS DE TODOS OS INDICADORES POR RUBRICA ---
+# --- GRÁFICO DE VALORES MÉDIOS DE TODOS OS INDICADORES (Com todas as rubricas) ---
 st.subheader("Valores Médios de Todos os Indicadores por Rubrica")
 
-if not df_filtered.empty and len(medias_rubricas) > 0:
-  df_plot = pd.DataFrame(medias_rubricas).sort_values(
+medias_rubricas_grafico = []
+for col in item_cols:
+  val_g = df_filtered[col + "_Pct"].mean()
+  if not pd.isna(val_g):
+    medias_rubricas_grafico.append(
+        {"Rubrica": col.replace("_Pct", ""), "Media": val_g}
+    )
+
+if not df_filtered.empty and len(medias_rubricas_grafico) > 0:
+  df_plot = pd.DataFrame(medias_rubricas_grafico).sort_values(
       by="Media", ascending=True
   )
   fig_rubricas = px.bar(
@@ -195,8 +209,7 @@ if not df_filtered.empty and len(medias_rubricas) > 0:
       orientation="h",
       text="Media",
       title=(
-          "Média de Satisfação por Rubrica (Filtrado por Anos/Meses"
-          " Selecionados)"
+          "Média de Satisfação por Rubrica (Incluindo Todas as Rubricas)"
       ),
       color="Media",
       color_continuous_scale="RdYlGn",
