@@ -21,8 +21,8 @@ def load_data():
 
 df = load_data()
 
-# Identificar estritamente as colunas originais de perguntas/rubricas (escala 1-5)
-cols_reservadas = [
+# Identificar colunas base de metadados e agregados
+non_rubric_cols = [
     "Data",
     "Ano",
     "Mês",
@@ -35,13 +35,15 @@ cols_reservadas = [
     "Rest_Pct",
     "Geral_Pct",
 ]
-item_cols = [c for c in df.columns if c not in cols_reservadas]
 
-# Criar/garantir colunas em percentagem (0-100%) para cada rubrica
+# Identificar colunas originais de rubricas (escala 1-5)
+item_cols = [c for c in df.columns if c not in non_rubric_cols]
+
+# Garantir conversão para percentagem (0-100%) para cada rubrica
 for col in item_cols:
   pct_col_name = f"{col}_Pct"
   if pct_col_name not in df.columns:
-    df[pct_col_name] = (df[col] / 5.0) * 100.0
+    df[pct_col_name] = (df[col] / 5.0) * 100
 
 # Se a coluna Geral_Pct não existir ou não estiver em 0-100%, calcular a média das rubricas
 if "Geral_Pct" not in df.columns:
@@ -51,7 +53,7 @@ elif df["Geral_Pct"].max() <= 5.0:
   df["Geral_Pct"] = (df["Geral_Pct"] / 5.0) * 100.0
 
 # Taxa de resposta por inquérito
-df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100.0
+df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100
 
 # Título Principal
 st.title("Análise de Inquéritos de Satisfação")
@@ -60,10 +62,9 @@ st.markdown(
     " temporal detalhada e análise por secção."
 )
 
-# --- BARRA LATERAL (FILTROS DE SEGMENTAÇÃO E OBJETIVOS) ---
+# --- BARRA LATERAL (FILTROS E OBJETIVOS) ---
 st.sidebar.header("Filtros de Segmentação")
 
-# Filtro de Anos
 anos_disponiveis = sorted(df["Ano"].dropna().unique())
 anos_selecionados = st.sidebar.multiselect(
     "Selecionar Anos", options=anos_disponiveis, default=anos_disponiveis
@@ -72,7 +73,6 @@ df_filtered = (
     df[df["Ano"].isin(anos_selecionados)] if anos_selecionados else df
 )
 
-# Filtro de Meses (Ordenado Cronologicamente)
 meses_ordem = [
     "Janeiro",
     "Fevereiro",
@@ -97,7 +97,6 @@ meses_selecionados = st.sidebar.multiselect(
 if meses_selecionados:
   df_filtered = df_filtered[df_filtered["Mês"].isin(meses_selecionados)]
 
-# Filtro de Nacionalidade
 nacionalidades_disponiveis = sorted(
     df_filtered["Nacionalidade"].dropna().unique()
 )
@@ -111,7 +110,6 @@ if nacionalidades_selecionadas:
       df_filtered["Nacionalidade"].isin(nacionalidades_selecionadas)
   ]
 
-# Filtro de Quarto
 if "Quarto" in df_filtered.columns:
   quartos_disponiveis = sorted([
       str(q) for q in df_filtered["Quarto"].dropna().unique()
