@@ -52,10 +52,10 @@ df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100
 st.title("Análise de Inquéritos de Satisfação")
 st.markdown(
     "Hotel Alísios — Gestão dinâmica de inquéritos, objetivos, evolução"
-    " temporal e análise detalhada."
+    " temporal detalhada e análise por secção."
 )
 
-# --- BARRA LATERAL (FILTROS MÚLTIPLOS E CONFIGURAÇÃO DE OBJETIVOS) ---
+# --- BARRA LATERAL (FILTROS MÚLTIPLOS E OBJETIVOS) ---
 st.sidebar.header("Filtros de Segmentação")
 
 # Filtro de Anos
@@ -67,8 +67,25 @@ df_filtered = (
     df[df["Ano"].isin(anos_selecionados)] if anos_selecionados else df
 )
 
-# Filtro de Meses
-meses_disponiveis = sorted(df_filtered["Mês"].dropna().unique())
+# Filtro de Meses (Ordenado Cronologicamente)
+meses_ordem = [
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+]
+meses_disponiveis = sorted(
+    df_filtered["Mês"].dropna().unique(),
+    key=lambda x: meses_ordem.index(x) if x in meses_ordem else 99,
+)
 meses_selecionados = st.sidebar.multiselect(
     "Selecionar Meses", options=meses_disponiveis, default=meses_disponiveis
 )
@@ -89,7 +106,7 @@ if nacionalidades_selecionadas:
       df_filtered["Nacionalidade"].isin(nacionalidades_selecionadas)
   ]
 
-# Filtro por Número de Quarto
+# Filtro de Quarto
 if "Quarto" in df_filtered.columns:
   quartos_disponiveis = sorted([
       str(q) for q in df_filtered["Quarto"].dropna().unique()
@@ -153,7 +170,6 @@ with col_metricas:
         "Nacionalidades", f"{df_filtered['Nacionalidade'].nunique()}"
     )
 
-# 1º Conta-Rotações: Satisfação Geral
 fig_gauge_sat = go.Figure(
     go.Indicator(
         mode="gauge+number+delta",
@@ -183,7 +199,6 @@ fig_gauge_sat = go.Figure(
 fig_gauge_sat.update_layout(height=220, margin=dict(t=30, b=10, l=20, r=20))
 col_gauge1.plotly_chart(fig_gauge_sat, use_container_width=True)
 
-# 2º Conta-Rotações: Taxa de Resposta
 fig_gauge_resp = go.Figure(
     go.Indicator(
         mode="gauge+number+delta",
@@ -215,30 +230,46 @@ col_gauge2.plotly_chart(fig_gauge_resp, use_container_width=True)
 
 st.markdown("---")
 
-# EVOLUÇÃO TEMPORAL (Corrigido para 'ME')
-st.subheader("📈 Evolução Temporal da Satisfação e Inquéritos")
+# --- ANÁLISE TEMPORAL PARA TODOS OS INDICADORES ---
+st.subheader("📈 Evolução Temporal de Indicadores")
 if not df_filtered.empty and "Data" in df_filtered.columns:
+  indicador_selecionado = st.selectbox(
+      "Selecione o Indicador para Análise Temporal:",
+      options=["Geral_Pct"] + [c + "_Pct" for c in item_cols],
+      format_func=lambda x: "Satisfação Global (%)"
+      if x == "Geral_Pct"
+      else x.replace("_Pct", ""),
+  )
+
   df_temp = (
       df_filtered.set_index("Data")
-      .resample("ME")["Geral_Pct"]
+      .resample("ME")[indicador_selecionado]
       .mean()
       .reset_index()
   )
-  df_temp["Satisfação Geral (%)"] = df_temp["Geral_Pct"] * 100
+  df_temp["Media (%)"] = df_temp[indicador_selecionado] * 100
 
   fig_temp = px.line(
       df_temp,
       x="Data",
-      y="Satisfação Geral (%)",
+      y="Media (%)",
       markers=True,
-      title="Evolução Mensal da Satisfação Geral (%)",
+      title=f"Evolução Mensal: {indicador_selecionado.replace('_Pct', '')}",
       line_shape="spline",
   )
+
+  obj_atual = (
+      objetivo_geral
+      if indicador_selecionado == "Geral_Pct"
+      else objetivos_especificos.get(
+          indicador_selecionado.replace("_Pct", ""), 90.0
+      )
+  )
   fig_temp.add_hline(
-      y=objetivo_geral,
+      y=obj_atual,
       line_dash="dash",
       line_color="red",
-      annotation_text=f"Objetivo ({objetivo_geral:.0f}%)",
+      annotation_text=f"Objetivo ({obj_atual:.0f}%)",
   )
   fig_temp.update_layout(height=300, yaxis=dict(range=[50, 105]))
   st.plotly_chart(fig_temp, use_container_width=True)
@@ -340,7 +371,7 @@ if not df_filtered.empty:
 st.markdown("---")
 
 # --- PAINEL DE CONTA-ROTAÇÕES ORGANIZADO POR SECÇÃO ---
-st.subheader("Painel de Conta-Rotações Organizado por Secção")
+st.subheader("Análise por Secção")
 
 seccoes = {
     "Front-Office": [
