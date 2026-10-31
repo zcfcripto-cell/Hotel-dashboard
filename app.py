@@ -51,18 +51,19 @@ item_cols = [
 for col in item_cols:
   pct_col_name = f"{col}_Pct"
   if pct_col_name not in df.columns:
-    df[pct_col_name] = (
-        df[col] * 20.0 if df[col].max() <= 5.0 else df[col].astype(float)
-    )
+    df[pct_col_name] = (df[col] / 5.0) * 100.0
 
 # Taxa de resposta por inquérito
 df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100.0
 
-# Garantir o cálculo da Satisfação Global (0-100%)
+# Garantir o cálculo da Satisfação Global (0-100%) com normalização de escala
 pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
 if "Geral_Pct" in df.columns:
-  if df["Geral_Pct"].max() <= 5.0:
-    df["Geral_Pct"] = df["Geral_Pct"] * 20.0
+  max_val = df["Geral_Pct"].max()
+  if max_val <= 1.0:
+    df["Geral_Pct"] = df["Geral_Pct"] * 100.0
+  elif max_val <= 5.0:
+    df["Geral_Pct"] = (df["Geral_Pct"] / 5.0) * 100.0
 else:
   df["Geral_Pct"] = df[pct_rubric_cols].mean(axis=1)
 
@@ -293,26 +294,6 @@ st.markdown("---")
 # --- ANÁLISE POR SECÇÃO ---
 st.subheader("Análise por Secção")
 
-seccoes = {
-    "Front-Office": [
-        c for c in item_cols if c.startswith("Front-Office -")
-    ],
-    "Quartos": [c for c in item_cols if c.startswith("Quarto -")],
-    "Pequeno-Almoço": [
-        c for c in item_cols if c.startswith("Pequeno-Almoço -")
-    ],
-    "Restaurante / Bar": [
-        c for c in item_cols if c.startswith("Restaurante / Bar -")
-    ],
-    "Outros Serviços e Instalações": [
-        c
-        for c in item_cols
-        if not c.startswith(
-            ("Front-Office -", "Quarto -", "Pequeno-Almoço -", "Restaurante / Bar -")
-        )
-    ],
-}
-
 
 def render_gauge_grid(cols_list, seccao_titulo):
   st.markdown(f"### 🏨 Secção: {seccao_titulo}")
@@ -384,6 +365,26 @@ def render_gauge_grid(cols_list, seccao_titulo):
         grid_cols[i].plotly_chart(fig_ind, use_container_width=True)
   st.markdown("---")
 
+
+seccoes = {
+    "Front-Office": [
+        c for c in item_cols if c.startswith("Front-Office -")
+    ],
+    "Quartos": [c for c in item_cols if c.startswith("Quarto -")],
+    "Pequeno-Almoço": [
+        c for c in item_cols if c.startswith("Pequeno-Almoço -")
+    ],
+    "Restaurante / Bar": [
+        c for c in item_cols if c.startswith("Restaurante / Bar -")
+    ],
+    "Outros Serviços e Instalações": [
+        c
+        for c in item_cols
+        if not c.startswith(
+            ("Front-Office -", "Quarto -", "Pequeno-Almoço -", "Restaurante / Bar -")
+        )
+    ],
+}
 
 for sec_nome, sec_colunas in seccoes.items():
   if sec_colunas:
