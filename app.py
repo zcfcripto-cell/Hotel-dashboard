@@ -315,7 +315,7 @@ if df is not None and not df.empty:
                 },
             )
         )
-        fig_gauge_sat.update_layout(height=220, margin=dict(t=30, b=10, l=20, r=20))
+        fig_gauge_sat.update_layout(height=230, margin=dict(t=65, b=10, l=20, r=20))
         st.plotly_chart(fig_gauge_sat, use_container_width=True)
 
     with col_gauge2:
@@ -351,7 +351,7 @@ if df is not None and not df.empty:
                 },
             )
         )
-        fig_gauge_resp.update_layout(height=220, margin=dict(t=30, b=10, l=20, r=20))
+        fig_gauge_resp.update_layout(height=230, margin=dict(t=65, b=10, l=20, r=20))
         st.plotly_chart(fig_gauge_resp, use_container_width=True)
 
     st.markdown("---")
@@ -476,8 +476,9 @@ if df is not None and not df.empty:
                             },
                         )
                     )
+                    # CORRIGIDO: Aumentado o topo (t=65) e a altura (height=230) para evitar cortes nos títulos
                     fig_ind.update_layout(
-                        height=210, margin=dict(t=45, b=10, l=15, r=15)
+                        height=230, margin=dict(t=65, b=10, l=15, r=15)
                     )
                     grid_cols[i].plotly_chart(
                         fig_ind, use_container_width=True
@@ -515,7 +516,7 @@ if df is not None and not df.empty:
             render_gauge_grid(sec_colunas, sec_nome)
 
     # ---------------------------------------------------------
-    # ANÁLISE DE VARIÁVEIS DE RESPOSTA 0 E 1 (NOVO)
+    # ANÁLISE DE VARIÁVEIS DE RESPOSTA 0 E 1
     # ---------------------------------------------------------
     st.subheader("🎯 Análise de Motivos de Escolha, Fidelização e Ambientais")
 
