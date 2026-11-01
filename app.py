@@ -16,7 +16,7 @@ st.markdown(
 )
 
 # ---------------------------------------------------------
-# BOTÃO DE UPLOAD DE DADOS NA BARRA LATERAL
+# CARREGAMENTO E TRATAMENTO DOS DADOS
 # ---------------------------------------------------------
 st.sidebar.header("📁 Gestão de Dados")
 uploaded_file = st.sidebar.file_uploader(
@@ -63,24 +63,27 @@ def load_data(file):
 df = load_data(uploaded_file)
 
 if df is not None and not df.empty:
+  # Colunas reservadas baseadas na estrutura real do Excel
   reserved_raw_cols = [
       "Data",
       "Ano",
       "Mês",
       "Inq. Nº",
-      "distribuidos",
+      "Distribuídos",
       "Nacionalidade",
       "Quarto",
       "FO",
       "Geral",
   ]
 
+  # Identificar dinamicamente as rubricas de avaliação
   item_cols = [
       c
       for c in df.columns
       if c not in reserved_raw_cols and not c.endswith("_Pct")
   ]
 
+  # Converter notas brutas para numérico e calcular percentagens (1 a 5 -> 0 a 100%)
   for col in item_cols:
     pct_col_name = f"{col}_Pct"
     if pct_col_name not in df.columns:
@@ -90,31 +93,32 @@ if df is not None and not df.empty:
   pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
 
   # ---------------------------------------------------------
-  # CÁLCULO DA TAXA DE RESPOSTA POR DATA
-  # (Número de inquéritos recebidos na data / total distribuídos registados nessa data)
+  # CÁLCULO DA TAXA DE RESPOSTA CORRETO (Por Data)
+  # Número de inquéritos recebidos na data / Total 'Distribuídos' nessa data
   # ---------------------------------------------------------
-  if "distribuidos" in df.columns and "Data" in df.columns:
-    df["distribuidos"] = pd.to_numeric(df["distribuidos"], errors="coerce")
+  if "Distribuídos" in df.columns and "Data" in df.columns:
+    df["Distribuídos"] = pd.to_numeric(df["Distribuídos"], errors="coerce")
 
-    # Contar quantos inquéritos existem por cada data
+    # Contagem de inquéritos recebidos por data
     contagem_por_data = df.groupby("Data")["Inq. Nº"].transform("count")
 
-    # Obter o valor de distribuídos registado para essa data (assumindo que é constante por dia)
-    distribuidos_por_data = df["distribuidos"]
-
-    # Taxa de resposta = (Contagem de respostas / Distribuidos) * 100
+    # Taxa de resposta (%) = (Inquéritos recebidos / Distribuídos registados) * 100
     df["Taxa_Resposta_Inquerito"] = (
-        contagem_por_data / distribuidos_por_data.replace(0, pd.NA)
+        contagem_por_data / df["Distribuídos"].replace(0, pd.NA)
     ) * 100.0
     df["Taxa_Resposta_Inquerito"] = df["Taxa_Resposta_Inquerito"].fillna(0)
   else:
     df["Taxa_Resposta_Inquerito"] = 0.0
 
+  # Satisfação Global em percentagem (média das rubricas do inquérito)
   if pct_rubric_cols:
     df["Geral_Pct"] = df[pct_rubric_cols].mean(axis=1)
   else:
     df["Geral_Pct"] = 0.0
 
+  # ---------------------------------------------------------
+  # FILTROS DE SEGMENTAÇÃO (BARRA LATERAL)
+  # ---------------------------------------------------------
   st.sidebar.markdown("---")
   st.sidebar.header("Filtros de Segmentação")
 
@@ -195,6 +199,9 @@ if df is not None and not df.empty:
           df_filtered["Quarto"].astype(str).isin(quartos_selecionados)
       ]
 
+  # ---------------------------------------------------------
+  # GESTÃO DE OBJECTIVOS
+  # ---------------------------------------------------------
   st.sidebar.markdown("---")
   st.sidebar.header("🎯 Gestão de Objetivos (%)")
 
@@ -246,6 +253,9 @@ if df is not None and not df.empty:
     satisfacao_geral = 0
     taxa_resposta_media = 0
 
+  # ---------------------------------------------------------
+  # MÉTRICAS E INDICADORES (GAUGES)
+  # ---------------------------------------------------------
   col_metricas, col_gauge1, col_gauge2 = st.columns([1, 1.5, 1.5])
 
   with col_metricas:
@@ -329,6 +339,9 @@ if df is not None and not df.empty:
 
   st.markdown("---")
 
+  # ---------------------------------------------------------
+  # EVOLUÇÃO TEMPORAL
+  # ---------------------------------------------------------
   st.subheader("📈 Evolução Temporal de Indicadores")
   if not df_filtered.empty and "Data" in df_filtered.columns:
     temporal_options = ["Geral_Pct"] + pct_rubric_cols
@@ -375,6 +388,9 @@ if df is not None and not df.empty:
 
   st.markdown("---")
 
+  # ---------------------------------------------------------
+  # ANÁLISE POR SECÇÃO
+  # ---------------------------------------------------------
   st.subheader("Análise por Secção")
 
 
