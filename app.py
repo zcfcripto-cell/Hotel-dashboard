@@ -205,6 +205,44 @@ if df is not None and not df.empty:
         taxa_resposta_media = 0.0
 
     # ---------------------------------------------------------
+    # CÁLCULO DE COMPARAÇÃO HOMÓLOGA (MoM & YoY)
+    # ---------------------------------------------------------
+    satisfacao_mom_diff = 0.0
+    satisfacao_yoy_diff = 0.0
+
+    if not df_filtered.empty and "Data" in df_filtered.columns and not df.empty:
+        df_sorted = df_filtered.sort_values("Data")
+        max_date = df_sorted["Data"].max()
+        
+        if pd.notna(max_date):
+            current_year = max_date.year
+            current_month = max_date.month
+
+            prev_month = current_month - 1 if current_month > 1 else 12
+            prev_year = current_year if current_month > 1 else current_year - 1
+
+            df_current_m = df[(df["Data"].dt.year == current_year) & (df["Data"].dt.month == current_month)]
+            df_prev_m = df[(df["Data"].dt.year == prev_year) & (df["Data"].dt.month == prev_month)]
+
+            curr_val = satisfacao_geral
+            if not df_current_m.empty:
+                curr_means = df_current_m[pct_rubric_cols].mean(axis=1, skipna=True).dropna()
+                curr_val = float(curr_means.mean()) if not curr_means.empty else satisfacao_geral
+
+            if not df_prev_m.empty:
+                prev_means = df_prev_m[pct_rubric_cols].mean(axis=1, skipna=True).dropna()
+                prev_val = float(prev_means.mean()) if not prev_means.empty else 0.0
+                satisfacao_mom_diff = curr_val - prev_val
+
+            prev_y_year = current_year - 1
+            df_yoy_m = df[(df["Data"].dt.year == prev_y_year) & (df["Data"].dt.month == current_month)]
+
+            if not df_yoy_m.empty:
+                yoy_means = df_yoy_m[pct_rubric_cols].mean(axis=1, skipna=True).dropna()
+                yoy_val = float(yoy_means.mean()) if not yoy_means.empty else 0.0
+                satisfacao_yoy_diff = curr_val - yoy_val
+
+    # ---------------------------------------------------------
     # MÉTRICAS E INDICADORES (GAUGES)
     # ---------------------------------------------------------
     col_metricas, col_gauge1, col_gauge2 = st.columns([1, 1.5, 1.5])
@@ -257,6 +295,27 @@ if df is not None and not df.empty:
         )
         fig_gauge_resp.update_layout(height=230, margin=dict(t=65, b=10, l=20, r=20))
         st.plotly_chart(fig_gauge_resp, use_container_width=True)
+
+    # ---------------------------------------------------------
+    # SECÇÃO DE COMPARAÇÃO HOMÓLOGA (MoM & YoY)
+    # ---------------------------------------------------------
+    st.markdown("### 📊 Análise de Tendência Homóloga (MoM & YoY)")
+    col_mom, col_yoy = st.columns(2)
+
+    with col_mom:
+        st.metric(
+            label="🔄 Variação Face ao Mês Anterior (MoM)",
+            value=f"{satisfacao_geral:.2f}%",
+            delta=f"{satisfacao_mom_diff:+.2f}% vs mês anterior"
+        )
+
+    with col_yoy:
+        st.metric(
+            label="📅 Variação Homóloga (YoY - Face ao Ano Transato)",
+            value=f"{satisfacao_geral:.2f}%",
+            delta=f"{satisfacao_yoy_diff:+.2f}% vs mesmo mês do ano anterior",
+            delta_color="normal"
+        )
 
     # ---------------------------------------------------------
     # PAINEL DE DESTAQUES (TOP & FLOPS)
@@ -514,7 +573,6 @@ if df is not None and not df.empty:
             pdf.cell(30, 6, med_val, 1, 0, 'C')
             pdf.cell(30, 6, n_val, 1, 1, 'C')
 
-        # Gravar em ficheiro temporário
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         pdf.output(temp_file.name)
         return temp_file.name
