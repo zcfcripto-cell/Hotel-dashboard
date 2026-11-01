@@ -101,7 +101,7 @@ if df is not None and not df.empty:
         and not c.endswith("_Pct")
     ]
 
-    # Limpeza estrita: força tudo o que não seja número de 1 a 5 a pd.NA (ignorando "N", texto, etc.)
+    # Limpeza estrita: força tudo o que não seja número de 1 a 5 a pd.NA
     for col in item_cols:
         df[col] = pd.to_numeric(
             pd.to_numeric(df[col], errors="coerce"), errors="coerce"
@@ -112,6 +112,13 @@ if df is not None and not df.empty:
         df[pct_col_name] = df[col] * 20.0
 
     pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
+
+    # Tratamento especial caso exista a coluna original "Geral" no Excel
+    if "Geral" in df.columns:
+        df["Geral"] = pd.to_numeric(pd.to_numeric(df["Geral"], errors="coerce"), errors="coerce")
+        df["Geral_Excel_Pct"] = df["Geral"] * 20.0 if df["Geral"].max() <= 5 else df["Geral"]
+    else:
+        df["Geral_Excel_Pct"] = pd.NA
 
     # ---------------------------------------------------------
     # CÁLCULO DA TAXA DE RESPOSTA POR DATA
@@ -213,10 +220,17 @@ if df is not None and not df.empty:
             ]
 
     # ---------------------------------------------------------
-    # GESTÃO DE OBJECTIVOS
+    # GESTÃO DE OBJECTIVOS E MÉTODO DE CÁLCULO DA SATISFAÇÃO
     # ---------------------------------------------------------
     st.sidebar.markdown("---")
-    st.sidebar.header("🎯 Gestão de Objetivos (%)")
+    st.sidebar.header("🎯 Gestão de Objetivos & Cálculo")
+
+    # Opção para escolher a origem do cálculo da Satisfação Geral (ajuste para coincidir com o Excel)
+    metodo_calculo_geral = st.sidebar.selectbox(
+        "Método de Cálculo da Satisfação Geral",
+        options=["Média global de todas as rubricas (1-5)", "Coluna 'Geral' original do Excel"],
+        index=0 if "Geral_Excel_Pct" not in df.columns or df["Geral_Excel_Pct"].dropna().empty else 1
+    )
 
     if "objetivo_geral" not in st.session_state:
         st.session_state.objetivo_geral = 90.0
@@ -260,15 +274,15 @@ if df is not None and not df.empty:
 
     total_inqueritos = len(df_filtered)
     
-    # Cálculo rigoroso da Satisfação Geral (idêntico ao Excel: média de todos os pontos de escala válidos x 20)
-    if not df_filtered.empty and item_cols:
-        valores_validos_escala = df_filtered[item_cols].values.flatten()
-        valores_validos_escala = valores_validos_escala[~pd.isna(valores_validos_escala)]
-        
-        if len(valores_validos_escala) > 0:
-            satisfacao_geral = float(valores_validos_escala.mean() * 20.0)
+    # Cálculo da Satisfação Geral com base no método escolhido
+    if not df_filtered.empty:
+        if metodo_calculo_geral == "Coluna 'Geral' original do Excel" and "Geral_Excel_Pct" in df_filtered.columns:
+            vals_geral = df_filtered["Geral_Excel_Pct"].dropna()
+            satisfacao_geral = float(vals_geral.mean()) if len(vals_geral) > 0 else 0.0
         else:
-            satisfacao_geral = 0.0
+            valores_validos_escala = df_filtered[item_cols].values.flatten()
+            valores_validos_escala = valores_validos_escala[~pd.isna(valores_validos_escala)]
+            satisfacao_geral = float(valores_validos_escala.mean() * 20.0) if len(valores_validos_escala) > 0 else 0.0
             
         taxa_resposta_media = df_filtered["Taxa_Resposta_Inquerito"].mean()
     else:
@@ -366,7 +380,6 @@ if df is not None and not df.empty:
     # ---------------------------------------------------------
     st.subheader("📈 Evolução Temporal de Indicadores")
     if not df_filtered.empty and "Data" in df_filtered.columns:
-        # Criar coluna auxiliar para a evolução temporal mensal da Satisfação Geral
         df_filtered["Geral_Pct_Row"] = df_filtered[pct_rubric_cols].mean(axis=1)
         
         temporal_options = ["Geral_Pct_Row"] + pct_rubric_cols
