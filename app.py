@@ -63,8 +63,8 @@ def load_data(file):
 df = load_data(uploaded_file)
 
 if df is not None and not df.empty:
-  # Colunas reservadas baseadas na estrutura real do Excel
-  reserved_raw_cols = [
+  # 1. Colunas de Controlo / Metadados
+  meta_cols = [
       "Data",
       "Ano",
       "Mês",
@@ -76,14 +76,29 @@ if df is not None and not df.empty:
       "Geral",
   ]
 
-  # Identificar dinamicamente as rubricas de avaliação
+  # 2. Colunas de Resposta Binária / Motivos / Coluna1 (Ignoradas nas médias de satisfação)
+  binary_cols = [
+      "Preocupações Ambientais",
+      "Coluna1",
+      "Localização ",
+      "Preço",
+      "Qualidade",
+      "Comentários online",
+      "Outros",
+      "Recomendaria",
+      "Tenciona Voltar",
+  ]
+
+  # 3. Rubricas de Avaliação genuínas (Escala de 1 a 5)
   item_cols = [
       c
       for c in df.columns
-      if c not in reserved_raw_cols and not c.endswith("_Pct")
+      if c not in meta_cols
+      and c not in binary_cols
+      and not c.endswith("_Pct")
   ]
 
-  # Converter notas brutas para numérico e calcular percentagens (1 a 5 -> 0 a 100%)
+  # Converter rubricas para numérico e calcular percentagens (1 a 5 -> 0 a 100%)
   for col in item_cols:
     pct_col_name = f"{col}_Pct"
     if pct_col_name not in df.columns:
@@ -93,16 +108,11 @@ if df is not None and not df.empty:
   pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
 
   # ---------------------------------------------------------
-  # CÁLCULO DA TAXA DE RESPOSTA CORRETO (Por Data)
-  # Número de inquéritos recebidos na data / Total 'Distribuídos' nessa data
+  # CÁLCULO DA TAXA DE RESPOSTA POR DATA
   # ---------------------------------------------------------
   if "Distribuídos" in df.columns and "Data" in df.columns:
     df["Distribuídos"] = pd.to_numeric(df["Distribuídos"], errors="coerce")
-
-    # Contagem de inquéritos recebidos por data
     contagem_por_data = df.groupby("Data")["Inq. Nº"].transform("count")
-
-    # Taxa de resposta (%) = (Inquéritos recebidos / Distribuídos registados) * 100
     df["Taxa_Resposta_Inquerito"] = (
         contagem_por_data / df["Distribuídos"].replace(0, pd.NA)
     ) * 100.0
@@ -110,7 +120,7 @@ if df is not None and not df.empty:
   else:
     df["Taxa_Resposta_Inquerito"] = 0.0
 
-  # Satisfação Global em percentagem (média das rubricas do inquérito)
+  # Satisfação Global em percentagem (média exclusiva das rubricas de avaliação de 1 a 5)
   if pct_rubric_cols:
     df["Geral_Pct"] = df[pct_rubric_cols].mean(axis=1)
   else:
