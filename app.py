@@ -68,6 +68,14 @@ def load_data(file):
 df = load_data(uploaded_file)
 
 if df is not None and not df.empty:
+    # Diagnóstico rápido para sabermos exatamente as colunas e o estado da coluna "Geral"
+    with st.expander("🛠️ Diagnóstico de Colunas e Dados (Clica para ver)"):
+        st.write("Colunas detetadas no Excel:", list(df.columns))
+        if "Geral" in df.columns:
+            st.write("Valores na coluna 'Geral':", df["Geral"].head(10).tolist())
+        else:
+            st.warning("A coluna 'Geral' NÃO foi encontrada no Excel.")
+
     # 1. Colunas de Controlo / Metadados
     meta_cols = [
         "Data",
@@ -113,10 +121,13 @@ if df is not None and not df.empty:
 
     pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
 
-    # Tratamento especial caso exista a coluna original "Geral" no Excel
+    # Tratamento especial para a coluna "Geral" do Excel
     if "Geral" in df.columns:
-        df["Geral"] = pd.to_numeric(pd.to_numeric(df["Geral"], errors="coerce"), errors="coerce")
-        df["Geral_Excel_Pct"] = df["Geral"] * 20.0 if df["Geral"].max() <= 5 else df["Geral"]
+        df["Geral_Clean"] = pd.to_numeric(pd.to_numeric(df["Geral"], errors="coerce"), errors="coerce")
+        # Se os valores no Excel forem de 1 a 5, multiplica por 20 para passar a percentagem
+        df["Geral_Excel_Pct"] = df["Geral_Clean"].apply(
+            lambda x: x * 20.0 if pd.notna(x) and x <= 5 else x
+        )
     else:
         df["Geral_Excel_Pct"] = pd.NA
 
@@ -225,11 +236,10 @@ if df is not None and not df.empty:
     st.sidebar.markdown("---")
     st.sidebar.header("🎯 Gestão de Objetivos & Cálculo")
 
-    # Opção para escolher a origem do cálculo da Satisfação Geral (ajuste para coincidir com o Excel)
     metodo_calculo_geral = st.sidebar.selectbox(
         "Método de Cálculo da Satisfação Geral",
         options=["Média global de todas as rubricas (1-5)", "Coluna 'Geral' original do Excel"],
-        index=0 if "Geral_Excel_Pct" not in df.columns or df["Geral_Excel_Pct"].dropna().empty else 1
+        index=1 if "Geral_Excel_Pct" in df.columns and not df["Geral_Excel_Pct"].dropna().empty else 0
     )
 
     if "objetivo_geral" not in st.session_state:
