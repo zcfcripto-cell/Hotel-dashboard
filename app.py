@@ -81,7 +81,7 @@ if df is not None and not df.empty:
         "Geral",
     ]
 
-    # 2. Colunas de Resposta Binária / Motivos (Preocupações Ambientais passou para escala 1-5)
+    # 2. Colunas de Resposta Binária / Motivos
     binary_cols = [
         "Localização ",
         "Preço",
@@ -101,12 +101,11 @@ if df is not None and not df.empty:
         and not c.endswith("_Pct")
     ]
 
-    # Forçar conversão estrita para numérico em todas as rubricas (qualquer "N", texto ou erro vira NaN)
+    # Forçar conversão estrita para numérico (qualquer "N", texto ou erro vira NaN)
     for col in item_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
         pct_col_name = f"{col}_Pct"
-        if pct_col_name not in df.columns:
-            df[pct_col_name] = df[col] * 20.0
+        df[pct_col_name] = df[col] * 20.0
 
     pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
 
@@ -122,6 +121,9 @@ if df is not None and not df.empty:
         df["Taxa_Resposta_Inquerito"] = df["Taxa_Resposta_Inquerito"].fillna(0)
     else:
         df["Taxa_Resposta_Inquerito"] = 0.0
+
+    # Adicionar coluna de Satisfação Geral por inquérito (média das rubricas válidas da linha x 20)
+    df["Geral_Pct"] = df[pct_rubric_cols].mean(axis=1)
 
     # ---------------------------------------------------------
     # FILTROS DE SEGMENTAÇÃO (BARRA LATERAL)
@@ -257,7 +259,7 @@ if df is not None and not df.empty:
 
     total_inqueritos = len(df_filtered)
     
-    # Cálculo rigoroso da Satisfação Geral (média direta de todos os valores válidos x 20, igual ao Excel)
+    # Cálculo rigoroso da Satisfação Geral (média de todos os valores válidos de escala x 20)
     if not df_filtered.empty and item_cols:
         valores_validos_escala = df_filtered[item_cols].values.flatten()
         valores_validos_escala = valores_validos_escala[~pd.isna(valores_validos_escala)]
@@ -363,11 +365,13 @@ if df is not None and not df.empty:
     # ---------------------------------------------------------
     st.subheader("📈 Evolução Temporal de Indicadores")
     if not df_filtered.empty and "Data" in df_filtered.columns:
-        temporal_options = pct_rubric_cols
+        temporal_options = ["Geral_Pct"] + pct_rubric_cols
         indicador_selecionado = st.selectbox(
             "Selecione o Indicador para Análise Temporal:",
             options=temporal_options,
-            format_func=lambda x: x.replace("_Pct", ""),
+            format_func=lambda x: "Satisfação Global (%)"
+            if x == "Geral_Pct"
+            else x.replace("_Pct", ""),
         )
 
         df_temp = (
@@ -384,12 +388,16 @@ if df is not None and not df.empty:
             x="Data",
             y="Media (%)",
             markers=True,
-            title=f"Evolução Mensal: {indicador_selecionado.replace('_Pct', '')}",
+            title=f"Evolução Mensal: {'Satisfação Global (%)' if indicador_selecionado == 'Geral_Pct' else indicador_selecionado.replace('_Pct', '')}",
             line_shape="spline",
         )
 
         nome_limpo = indicador_selecionado.replace("_Pct", "")
-        obj_atual = st.session_state.get(nome_limpo, 90.0)
+        obj_atual = (
+            st.session_state.objetivo_geral
+            if indicador_selecionado == "Geral_Pct"
+            else st.session_state.get(nome_limpo, 90.0)
+        )
         
         fig_temp.add_hline(
             y=obj_atual,
@@ -403,7 +411,7 @@ if df is not None and not df.empty:
     st.markdown("---")
 
     # ---------------------------------------------------------
-    # ANÁLISE POR SECÇÃO (COM NÚMERO DE RESPOSTAS NO TÍTULO)
+    # ANÁLISE POR SECÇÃO
     # ---------------------------------------------------------
     st.subheader("Análise por Secção")
 
