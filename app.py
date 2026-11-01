@@ -192,9 +192,10 @@ if df is not None and not df.empty:
             vals_geral = df_filtered["Geral_Excel_Pct"].dropna()
             satisfacao_geral = float(vals_geral.mean()) if len(vals_geral) > 0 else 0.0
         else:
-            # MÉTODO DAS LINHAS: Média horizontal por inquérito e depois média final
+            # MÉTODO DAS LINHAS: Média horizontal por inquérito (com proteção contra NaNs)
             row_means = df_filtered[pct_rubric_cols].mean(axis=1, skipna=True)
-            satisfacao_geral = float(row_means.mean()) if not row_means.dropna().empty else 0.0
+            row_means_clean = row_means.dropna()
+            satisfacao_geral = float(row_means_clean.mean()) if not row_means_clean.empty else 0.0
             
         taxa_resposta_media = df_filtered["Taxa_Resposta_Inquerito"].mean()
     else:
@@ -314,14 +315,14 @@ if df is not None and not df.empty:
             col_original = col
             pct_col_name = f"{col}_Pct"
             if pct_col_name in df_filtered.columns:
-                # MÉDIA POR COLUNA: Média simples da coluna em percentagem, ignorando NaNs (como no Excel)
+                # MÉDIA POR COLUNA: Média simples da coluna em percentagem, ignorando NaNs
                 serie_valida = df_filtered[pct_col_name].dropna()
                 n_respostas = len(serie_valida)
                 
                 if n_respostas > 0:
-                    val_g = serie_valida.mean()
+                    val_g = float(serie_valida.mean())
                     obj_val = st.session_state.get(col_original, 90.0)
-                    delta_calc = (val_g / obj_val) - 1
+                    delta_calc = (val_g / obj_val) - 1 if obj_val > 0 else 0.0
                     valid_cols.append({
                         "Rubrica": col_original,
                         "Media": val_g,
