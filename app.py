@@ -101,12 +101,12 @@ if df is not None and not df.empty:
         and not c.endswith("_Pct")
     ]
 
-    # Limpeza estrita: força tudo o que não seja número de 1 a 5 a NaN (ignorando "N", texto, etc.)
+    # Limpeza estrita: força tudo o que não seja número de 1 a 5 a pd.NA (ignorando "N", texto, etc.)
     for col in item_cols:
         df[col] = pd.to_numeric(
             pd.to_numeric(df[col], errors="coerce"), errors="coerce"
         )
-        df.loc[(df[col] < 1) | (df[col] > 5), col] = pd.na
+        df.loc[(df[col] < 1) | (df[col] > 5), col] = pd.NA
 
         pct_col_name = f"{col}_Pct"
         df[pct_col_name] = df[col] * 20.0
@@ -366,12 +366,15 @@ if df is not None and not df.empty:
     # ---------------------------------------------------------
     st.subheader("📈 Evolução Temporal de Indicadores")
     if not df_filtered.empty and "Data" in df_filtered.columns:
-        temporal_options = ["Geral_Pct"] + pct_rubric_cols
+        # Criar coluna auxiliar para a evolução temporal mensal da Satisfação Geral
+        df_filtered["Geral_Pct_Row"] = df_filtered[pct_rubric_cols].mean(axis=1)
+        
+        temporal_options = ["Geral_Pct_Row"] + pct_rubric_cols
         indicador_selecionado = st.selectbox(
             "Selecione o Indicador para Análise Temporal:",
             options=temporal_options,
             format_func=lambda x: "Satisfação Global (%)"
-            if x == "Geral_Pct"
+            if x == "Geral_Pct_Row"
             else x.replace("_Pct", ""),
         )
 
@@ -389,14 +392,14 @@ if df is not None and not df.empty:
             x="Data",
             y="Media (%)",
             markers=True,
-            title=f"Evolução Mensal: {'Satisfação Global (%)' if indicador_selecionado == 'Geral_Pct' else indicador_selecionado.replace('_Pct', '')}",
+            title=f"Evolução Mensal: {'Satisfação Global (%)' if indicador_selecionado == 'Geral_Pct_Row' else indicador_selecionado.replace('_Pct', '')}",
             line_shape="spline",
         )
 
         nome_limpo = indicador_selecionado.replace("_Pct", "")
         obj_atual = (
             st.session_state.objetivo_geral
-            if indicador_selecionado == "Geral_Pct"
+            if indicador_selecionado == "Geral_Pct_Row"
             else st.session_state.get(nome_limpo, 90.0)
         )
         
