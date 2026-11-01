@@ -205,6 +205,26 @@ if df is not None and not df.empty:
         taxa_resposta_media = 0.0
 
     # ---------------------------------------------------------
+    # SISTEMA DE ALERTAS AUTOMÁTICOS (BAIXO DO OBJETIVO)
+    # ---------------------------------------------------------
+    alertas_criticos = []
+    for col in item_cols:
+        pct_col = f"{col}_Pct"
+        if pct_col in df_filtered.columns:
+            s_val = df_filtered[pct_col].dropna()
+            if not s_val.empty:
+                media_col = float(s_val.mean())
+                meta_col = st.session_state.get(col, 90.0)
+                if media_col < meta_col:
+                    alertas_criticos.append((col, media_col, meta_col))
+
+    if alertas_criticos:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🚨 Alertas Operacionais")
+        for rub, med, met in alertas_criticos:
+            st.sidebar.error(f"🔴 **{rub[:25]}...**\nAtual: {med:.1f}% | Meta: {met:.0f}%")
+
+    # ---------------------------------------------------------
     # CÁLCULO DE COMPARAÇÃO HOMÓLOGA (MoM & YoY)
     # ---------------------------------------------------------
     satisfacao_mom_diff = 0.0
@@ -341,6 +361,37 @@ if df is not None and not df.empty:
             st.success(f"🌟 **Ponto Forte (Top Performance):**\n\n `{top_item['Rubrica']}` com **{top_item['Média']:.2f}%** de satisfação.")
         with col_flop:
             st.warning(f"⚠️ **Ponto Crítico (Área de Atenção):**\n\n `{flop_item['Rubrica']}` com **{flop_item['Média']:.2f}%** de satisfação.")
+
+    # ---------------------------------------------------------
+    # MATRIZ DE CORRELAÇÃO (FATORES CRÍTICOS DE SUCESSO)
+    # ---------------------------------------------------------
+    st.markdown("---")
+    st.subheader("🔗 Matriz de Correlação com a Satisfação Global")
+    st.markdown("Identifica quais os indicadores que mais puxam pela nota global dos clientes.")
+
+    if not df_filtered.empty and "Geral_Excel_Pct" in df_filtered.columns and not df_filtered["Geral_Excel_Pct"].dropna().empty:
+        df_corr_data = df_filtered[pct_rubric_cols + ["Geral_Excel_Pct"]].copy()
+        df_corr_data.columns = [c.replace("_Pct", "") for c in pct_rubric_cols] + ["Geral"]
+        corr_matrix = df_corr_data.corr(numeric_only=True)
+
+        if "Geral" in corr_matrix.columns:
+            corr_geral = corr_matrix["Geral"].drop("Geral").sort_values(ascending=True).reset_index()
+            corr_geral.columns = ["Rubrica", "Correlação"]
+
+            fig_corr = px.bar(
+                corr_geral,
+                x="Correlação",
+                y="Rubrica",
+                orientation="h",
+                text=corr_geral["Correlação"].apply(lambda v: f"{v:.2f}"),
+                color="Correlação",
+                color_continuous_scale="Viridis",
+                range_x=[-1, 1]
+            )
+            fig_corr.update_layout(height=400, xaxis_title="Coeficiente de Correlação de Pearson", yaxis_title="")
+            st.plotly_chart(fig_corr, use_container_width=True)
+    else:
+        st.info("Necessário dados válidos na coluna 'Geral' do Excel para calcular a matriz de correlação.")
 
     st.markdown("---")
 
@@ -547,7 +598,6 @@ if df is not None and not df.empty:
         pdf.add_page()
         pdf.set_font('helvetica', '', 10)
 
-        # Resumo de Indicadores Principais
         pdf.set_font('helvetica', 'B', 12)
         pdf.cell(0, 8, '1. Indicadores Globais', 0, 1)
         pdf.set_font('helvetica', '', 10)
@@ -556,7 +606,6 @@ if df is not None and not df.empty:
         pdf.cell(0, 6, f'- Taxa de Resposta Média: {taxa_resposta_media:.2f}% (Objetivo: {st.session_state.objetivo_taxa_resp:.1f}%)', 0, 1)
         pdf.ln(5)
 
-        # Tabela de Rubricas
         pdf.set_font('helvetica', 'B', 12)
         pdf.cell(0, 8, '2. Desempenho por Rubrica', 0, 1)
         pdf.set_font('helvetica', 'B', 9)
