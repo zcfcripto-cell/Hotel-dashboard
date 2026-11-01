@@ -406,7 +406,7 @@ if df is not None and not df.empty:
     st.markdown("---")
 
     # ---------------------------------------------------------
-    # ANÁLISE POR SECÇÃO
+    # ANÁLISE POR SECÇÃO (COM NÚMERO DE RESPOSTAS NO TÍTULO)
     # ---------------------------------------------------------
     st.subheader("Análise por Secção")
 
@@ -417,8 +417,12 @@ if df is not None and not df.empty:
         for col in cols_list:
             pct_col_name = f"{col}_Pct"
             if pct_col_name in df_filtered.columns:
-                val_g = df_filtered[pct_col_name].mean()
-                if not pd.isna(val_g):
+                # Contar apenas as respostas válidas (não nulas) para esta rubrica específica
+                serie_valida = df_filtered[pct_col_name].dropna()
+                n_respostas = len(serie_valida)
+                
+                if n_respostas > 0:
+                    val_g = serie_valida.mean()
                     obj_val = st.session_state.get(col, 90.0)
                     delta_calc = (val_g / obj_val) - 1
                     valid_cols.append({
@@ -426,6 +430,7 @@ if df is not None and not df.empty:
                         "Media": val_g,
                         "Objetivo": obj_val,
                         "Delta": delta_calc,
+                        "N": n_respostas,
                     })
 
         if valid_cols:
@@ -442,7 +447,7 @@ if df is not None and not df.empty:
                     rubrica_nome = row_item["Rubrica"]
                     valor_m = row_item["Media"]
                     obj_m = row_item["Objetivo"]
-                    delta_m = row_item["Delta"]
+                    n_resp = int(row_item["N"])
 
                     fig_ind = go.Figure(
                         go.Indicator(
@@ -454,7 +459,7 @@ if df is not None and not df.empty:
                                 "valueformat": "+.1%",
                             },
                             title={
-                                "text": f"{rubrica_nome}<br><span style='font-size:11px;color:gray;'>Objetivo: {obj_m:.0f}%</span>",
+                                "text": f"{rubrica_nome}<br><span style='font-size:11px;color:gray;'>Objetivo: {obj_m:.0f}% | Respostas: {n_resp}</span>",
                                 "font": {"size": 13},
                             },
                             number={"suffix": "%", "font": {"size": 20}},
@@ -476,7 +481,6 @@ if df is not None and not df.empty:
                             },
                         )
                     )
-                    # CORRIGIDO: Aumentado o topo (t=65) e a altura (height=230) para evitar cortes nos títulos
                     fig_ind.update_layout(
                         height=230, margin=dict(t=65, b=10, l=15, r=15)
                     )
