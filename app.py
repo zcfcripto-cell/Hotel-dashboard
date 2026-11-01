@@ -369,29 +369,38 @@ if df is not None and not df.empty:
     st.subheader("🔗 Matriz de Correlação com a Satisfação Global")
     st.markdown("Identifica quais os indicadores que mais puxam pela nota global dos clientes.")
 
-    if not df_filtered.empty and "Geral_Excel_Pct" in df_filtered.columns and not df_filtered["Geral_Excel_Pct"].dropna().empty:
-        df_corr_data = df_filtered[pct_rubric_cols + ["Geral_Excel_Pct"]].copy()
-        df_corr_data.columns = [c.replace("_Pct", "") for c in pct_rubric_cols] + ["Geral"]
+    if "Geral_Pct_Row" not in df_filtered.columns:
+        df_filtered["Geral_Pct_Row"] = df_filtered[pct_rubric_cols].mean(axis=1, skipna=True)
+
+    if not df_filtered.empty and len(pct_rubric_cols) > 0:
+        df_corr_data = df_filtered[pct_rubric_cols + ["Geral_Pct_Row"]].copy()
+        df_corr_data.columns = [c.replace("_Pct", "") for c in pct_rubric_cols] + ["Satisfação Global"]
+        
         corr_matrix = df_corr_data.corr(numeric_only=True)
 
-        if "Geral" in corr_matrix.columns:
-            corr_geral = corr_matrix["Geral"].drop("Geral").sort_values(ascending=True).reset_index()
+        if "Satisfação Global" in corr_matrix.columns:
+            corr_geral = corr_matrix["Satisfação Global"].drop("Satisfação Global").dropna().sort_values(ascending=True).reset_index()
             corr_geral.columns = ["Rubrica", "Correlação"]
 
-            fig_corr = px.bar(
-                corr_geral,
-                x="Correlação",
-                y="Rubrica",
-                orientation="h",
-                text=corr_geral["Correlação"].apply(lambda v: f"{v:.2f}"),
-                color="Correlação",
-                color_continuous_scale="Viridis",
-                range_x=[-1, 1]
-            )
-            fig_corr.update_layout(height=400, xaxis_title="Coeficiente de Correlação de Pearson", yaxis_title="")
-            st.plotly_chart(fig_corr, use_container_width=True)
+            if not corr_geral.empty:
+                fig_corr = px.bar(
+                    corr_geral,
+                    x="Correlação",
+                    y="Rubrica",
+                    orientation="h",
+                    text=corr_geral["Correlação"].apply(lambda v: f"{v:.2f}"),
+                    color="Correlação",
+                    color_continuous_scale="Viridis",
+                    range_x=[-1, 1]
+                )
+                fig_corr.update_layout(height=450, xaxis_title="Coeficiente de Correlação de Pearson", yaxis_title="")
+                st.plotly_chart(fig_corr, use_container_width=True)
+            else:
+                st.info("Não há dados suficientes nas rubricas para calcular a correlação no período selecionado.")
+        else:
+            st.info("Não foi possível calcular a correlação global.")
     else:
-        st.info("Necessário dados válidos na coluna 'Geral' do Excel para calcular a matriz de correlação.")
+        st.info("Dados insuficientes para gerar a matriz de correlação.")
 
     st.markdown("---")
 
@@ -400,8 +409,6 @@ if df is not None and not df.empty:
     # ---------------------------------------------------------
     st.subheader("📈 Evolução Temporal de Indicadores")
     if not df_filtered.empty and "Data" in df_filtered.columns:
-        df_filtered["Geral_Pct_Row"] = df_filtered[pct_rubric_cols].mean(axis=1, skipna=True)
-        
         temporal_options = ["Geral_Pct_Row"] + pct_rubric_cols
         indicador_selecionado = st.selectbox(
             "Selecione o Indicador para Análise Temporal:",
