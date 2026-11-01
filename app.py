@@ -101,9 +101,13 @@ if df is not None and not df.empty:
         and not c.endswith("_Pct")
     ]
 
-    # Forçar conversão estrita para numérico (qualquer "N", texto ou erro vira NaN)
+    # Limpeza estrita: força tudo o que não seja número de 1 a 5 a NaN (ignorando "N", texto, etc.)
     for col in item_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = pd.to_numeric(
+            pd.to_numeric(df[col], errors="coerce"), errors="coerce"
+        )
+        df.loc[(df[col] < 1) | (df[col] > 5), col] = pd.na
+
         pct_col_name = f"{col}_Pct"
         df[pct_col_name] = df[col] * 20.0
 
@@ -121,9 +125,6 @@ if df is not None and not df.empty:
         df["Taxa_Resposta_Inquerito"] = df["Taxa_Resposta_Inquerito"].fillna(0)
     else:
         df["Taxa_Resposta_Inquerito"] = 0.0
-
-    # Adicionar coluna de Satisfação Geral por inquérito (média das rubricas válidas da linha x 20)
-    df["Geral_Pct"] = df[pct_rubric_cols].mean(axis=1)
 
     # ---------------------------------------------------------
     # FILTROS DE SEGMENTAÇÃO (BARRA LATERAL)
@@ -259,7 +260,7 @@ if df is not None and not df.empty:
 
     total_inqueritos = len(df_filtered)
     
-    # Cálculo rigoroso da Satisfação Geral (média de todos os valores válidos de escala x 20)
+    # Cálculo rigoroso da Satisfação Geral (idêntico ao Excel: média de todos os pontos de escala válidos x 20)
     if not df_filtered.empty and item_cols:
         valores_validos_escala = df_filtered[item_cols].values.flatten()
         valores_validos_escala = valores_validos_escala[~pd.isna(valores_validos_escala)]
