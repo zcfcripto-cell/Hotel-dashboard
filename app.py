@@ -9,429 +9,485 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-
-@st.cache_data
-def load_data():
-  file_path = "Dashboard_Satisfacao_Cliente_Corrigido.xlsx"
-  df = pd.read_excel(file_path, sheet_name="Base de Dados", header=2)
-  if "Data" in df.columns:
-    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
-  return df
-
-
-df = load_data()
-
-reserved_raw_cols = [
-    "Data",
-    "Ano",
-    "Mês",
-    "Inq. Nº",
-    "Nacionalidade",
-    "Quarto",
-    "FO",
-    "FO_Pct",
-    "Quarto_Pct",
-    "PA_Pct",
-    "Rest_Pct",
-    "Geral",
-    "Geral_Pct",
-]
-
-item_cols = [
-    c
-    for c in df.columns
-    if c not in reserved_raw_cols and not c.endswith("_Pct")
-]
-
-for col in item_cols:
-  pct_col_name = f"{col}_Pct"
-  if pct_col_name not in df.columns:
-    df[pct_col_name] = (
-        df[col] * 20.0 if df[col].max() <= 5.0 else df[col].astype(float)
-    )
-
-df["Taxa_Resposta_Inquerito"] = df[item_cols].notnull().mean(axis=1) * 100.0
-
-pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
-if "Geral_Pct" in df.columns:
-  max_val = df["Geral_Pct"].max()
-  if max_val <= 1.0:
-    df["Geral_Pct"] = df["Geral_Pct"] * 100.0
-  elif max_val <= 5.0:
-    df["Geral_Pct"] = (df["Geral_Pct"] / 5.0) * 100.0
-else:
-  df["Geral_Pct"] = df[pct_rubric_cols].mean(axis=1)
-
 st.title("Análise de Inquéritos de Satisfação")
 st.markdown(
     "Hotel Alísios — Gestão dinâmica de inquéritos, objetivos, evolução"
     " temporal detalhada e análise por secção."
 )
 
-st.sidebar.header("Filtros de Segmentação")
+# ---------------------------------------------------------
+# BOTÃO DE UPLOAD DE DADOS NA BARRA LATERAL
+# ---------------------------------------------------------
+st.sidebar.header("📁 Gestão de Dados")
+uploaded_file = st.sidebar.file_uploader(
+    "Carregar / Atualizar Ficheiro Excel", type=["xlsx", "xls"]
+)
 
-if "Data" in df.columns and not df["Data"].dropna().empty:
-  min_date = df["Data"].min().date()
-  max_date = df["Data"].max().date()
-  date_range = st.sidebar.date_input(
-      "Selecionar Intervalo de Datas",
-      value=(min_date, max_date),
-      min_value=min_date,
-      max_value=max_date,
-  )
-  if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
-    start_date, end_date = date_range
-    df_filtered = df[
-        (df["Data"].dt.date >= start_date) & (df["Data"].dt.date <= end_date)
-    ].copy()
+
+@st.cache_data
+def load_data(file):
+  if file is not None:
+    df = pd.read_excel(file, sheet_name="BD_Inquéritos", header=3)
   else:
-    df_filtered = df.copy()
-else:
-  df_filtered = df.copy()
+    # Ficheiro predefinido de fallback caso nenhum seja carregado
+    try:
+      df = pd.read_excel(
+          "BD Satisfação Cliente.xlsx", sheet_name="BD_Inquéritos", header=3
+      )
+    except Exception:
+      return None
 
-anos_disponiveis = sorted(df_filtered["Ano"].dropna().unique())
-anos_selecionados = st.sidebar.multiselect(
-    "Selecionar Anos", options=anos_disponiveis, default=anos_disponiveis
-)
-if anos_selecionados:
-  df_filtered = df_filtered[df_filtered["Ano"].isin(anos_selecionados)]
-
-meses_ordem = [
-    "Janeiro",
-    "Fevereiro",
-    "Março",
-    "Abril",
-    "Maio",
-    "Junho",
-    "Julho",
-    "Agosto",
-    "Setembro",
-    "Outubro",
-    "Novembro",
-    "Dezembro",
-]
-meses_disponiveis = sorted(
-    df_filtered["Mês"].dropna().unique(),
-    key=lambda x: meses_ordem.index(x) if x in meses_ordem else 99,
-)
-meses_selecionados = st.sidebar.multiselect(
-    "Selecionar Meses", options=meses_disponiveis, default=meses_disponiveis
-)
-if meses_selecionados:
-  df_filtered = df_filtered[df_filtered["Mês"].isin(meses_selecionados)]
-
-nacionalidades_disponiveis = sorted(
-    df_filtered["Nacionalidade"].dropna().unique()
-)
-nacionalidades_selecionadas = st.sidebar.multiselect(
-    "Selecionar Nacionalidades",
-    options=nacionalidades_disponiveis,
-    default=nacionalidades_disponiveis,
-)
-if nacionalidades_selecionadas:
-  df_filtered = df_filtered[
-      df_filtered["Nacionalidade"].isin(nacionalidades_selecionadas)
-  ]
-
-if "Quarto" in df_filtered.columns:
-  quartos_disponiveis = sorted([
-      str(q) for q in df_filtered["Quarto"].dropna().unique()
-  ])
-  quartos_selecionados = st.sidebar.multiselect(
-      "Filtrar por Quarto", options=quartos_disponiveis
-  )
-  if quartos_selecionados:
-    df_filtered = df_filtered[
-        df_filtered["Quarto"].astype(str).isin(quartos_selecionados)
+  if df is not None and "Data" in df.columns:
+    df["Data"] = pd.to_datetime(df["Data"], errors="coerce")
+    df["Ano"] = df["Data"].dt.year
+    meses_pt = [
+        "Janeiro",
+        "Fevereiro",
+        "Março",
+        "Abril",
+        "Maio",
+        "Junho",
+        "Julho",
+        "Agosto",
+        "Setembro",
+        "Outubro",
+        "Novembro",
+        "Dezembro",
     ]
-
-st.sidebar.markdown("---")
-st.sidebar.header("🎯 Gestão de Objetivos (%)")
-
-if "objetivo_geral" not in st.session_state:
-  st.session_state.objetivo_geral = 90.0
-if "objetivo_taxa_resp" not in st.session_state:
-  st.session_state.objetivo_taxa_resp = 75.0
-
-st.sidebar.slider(
-    "Objetivo Global de Satisfação (%)",
-    50.0,
-    100.0,
-    key="objetivo_geral",
-    step=1.0,
-)
-st.sidebar.slider(
-    "Objetivo de Taxa de Resposta (%)",
-    50.0,
-    100.0,
-    key="objetivo_taxa_resp",
-    step=1.0,
-)
-
-st.sidebar.markdown("### Objetivos por Rubrica")
-objetivos_especificos = {}
-for col in item_cols:
-  nome_limpo = col.replace("_Pct", "")
-  if nome_limpo not in st.session_state:
-    st.session_state[nome_limpo] = 90.0
-  objetivos_especificos[nome_limpo] = st.sidebar.slider(
-      f"Meta: {nome_limpo[:25]}...", 50.0, 100.0, key=nome_limpo, step=1.0
-  )
-
-anos_str = (
-    ", ".join(map(str, anos_selecionados))
-    if anos_selecionados
-    else "Todos"
-)
-meses_str = ", ".join(meses_selecionados) if meses_selecionados else "Todos"
-st.info(
-    f"📅 **Período Selecionado:** Anos: `{anos_str}` | Meses: `{meses_str}`"
-)
-
-total_inqueritos = len(df_filtered)
-if not df_filtered.empty:
-  satisfacao_geral = df_filtered["Geral_Pct"].mean()
-  taxa_resposta_media = df_filtered["Taxa_Resposta_Inquerito"].mean()
-else:
-  satisfacao_geral = 0
-  taxa_resposta_media = 0
-
-col_metricas, col_gauge1, col_gauge2 = st.columns([1, 1.5, 1.5])
-
-with col_metricas:
-  st.metric("Inquéritos Analisados", f"{total_inqueritos}")
-  if "Nacionalidade" in df_filtered.columns:
-    st.metric(
-        "Nacionalidades", f"{df_filtered['Nacionalidade'].nunique()}"
+    df["Mês"] = df["Data"].dt.month.map(
+        lambda x: meses_pt[x - 1] if pd.notna(x) and 1 <= x <= 12 else ""
     )
 
-with col_gauge1:
-  fig_gauge_sat = go.Figure(
-      go.Indicator(
-          mode="gauge+number+delta",
-          value=satisfacao_geral,
-          delta={
-              "reference": st.session_state.objetivo_geral,
-              "relative": False,
-              "valueformat": "+.1f",
-          },
-          title={"text": "Satisfação Geral (%)", "font": {"size": 16}},
-          number={"suffix": "%", "font": {"size": 24}},
-          gauge={
-              "axis": {"range": [0, 100], "tickwidth": 1},
-              "bar": {"color": "#1f77b4"},
-              "steps": [
-                  {
-                      "range": [0, st.session_state.objetivo_geral],
-                      "color": "#ffcccc",
-                  },
-                  {
-                      "range": [st.session_state.objetivo_geral, 100],
-                      "color": "#c6efce",
-                  },
-              ],
-              "threshold": {
-                  "line": {"color": "red", "width": 4},
-                  "thickness": 0.8,
-                  "value": st.session_state.objetivo_geral,
-              },
-          },
-      )
-  )
-  fig_gauge_sat.update_layout(height=220, margin=dict(t=30, b=10, l=20, r=20))
-  st.plotly_chart(fig_gauge_sat, use_container_width=True)
-
-with col_gauge2:
-  fig_gauge_resp = go.Figure(
-      go.Indicator(
-          mode="gauge+number+delta",
-          value=taxa_resposta_media,
-          delta={
-              "reference": st.session_state.objetivo_taxa_resp,
-              "relative": False,
-              "valueformat": "+.1f",
-          },
-          title={"text": "Taxa de Resposta Média (%)", "font": {"size": 16}},
-          number={"suffix": "%", "font": {"size": 24}},
-          gauge={
-              "axis": {"range": [0, 100], "tickwidth": 1},
-              "bar": {"color": "#2ca02c"},
-              "steps": [
-                  {
-                      "range": [0, st.session_state.objetivo_taxa_resp],
-                      "color": "#ffcccc",
-                  },
-                  {
-                      "range": [st.session_state.objetivo_taxa_resp, 100],
-                      "color": "#c6efce",
-                  },
-              ],
-              "threshold": {
-                  "line": {"color": "red", "width": 4},
-                  "thickness": 0.8,
-                  "value": st.session_state.objetivo_taxa_resp,
-              },
-          },
-      )
-  )
-  fig_gauge_resp.update_layout(height=220, margin=dict(t=30, b=10, l=20, r=20))
-  st.plotly_chart(fig_gauge_resp, use_container_width=True)
-
-st.markdown("---")
-
-st.subheader("📈 Evolução Temporal de Indicadores")
-if not df_filtered.empty and "Data" in df_filtered.columns:
-  temporal_options = ["Geral_Pct"] + pct_rubric_cols
-  indicador_selecionado = st.selectbox(
-      "Selecione o Indicador para Análise Temporal:",
-      options=temporal_options,
-      format_func=lambda x: "Satisfação Global (%)"
-      if x == "Geral_Pct"
-      else x.replace("_Pct", ""),
-  )
-
-  df_temp = (
-      df_filtered.set_index("Data")
-      .resample("ME")[indicador_selecionado]
-      .mean()
-      .dropna()
-      .reset_index()
-  )
-  df_temp["Media (%)"] = df_temp[indicador_selecionado]
-
-  fig_temp = px.line(
-      df_temp,
-      x="Data",
-      y="Media (%)",
-      markers=True,
-      title=f"Evolução Mensal: {indicador_selecionado.replace('_Pct', '')}",
-      line_shape="spline",
-  )
-
-  nome_limpo = indicador_selecionado.replace("_Pct", "")
-  obj_atual = (
-      st.session_state.objetivo_geral
-      if nome_limpo in ["Geral", "Satisfação Global"]
-      else st.session_state.get(nome_limpo, 90.0)
-  )
-  fig_temp.add_hline(
-      y=obj_atual,
-      line_dash="dash",
-      line_color="red",
-      annotation_text=f"Objetivo ({obj_atual:.0f}%)",
-  )
-  fig_temp.update_layout(height=300, yaxis=dict(range=[50, 105]))
-  st.plotly_chart(fig_temp, use_container_width=True)
-
-st.markdown("---")
-
-st.subheader("Análise por Secção")
+  return df
 
 
-def render_gauge_grid(cols_list, seccao_titulo):
-  st.markdown(f"### 🏨 Secção: {seccao_titulo}")
-  valid_cols = []
-  for col in cols_list:
+df = load_data(uploaded_file)
+
+if df is not None and not df.empty:
+  # Colunas reservadas (com a coluna 'distribuidos' integrada)
+  reserved_raw_cols = [
+      "Data",
+      "Ano",
+      "Mês",
+      "Inq. Nº",
+      "distribuidos",
+      "Nacionalidade",
+      "Quarto",
+      "FO",
+      "Geral",
+  ]
+
+  # Identificar rubricas automaticamente
+  item_cols = [
+      c
+      for c in df.columns
+      if c not in reserved_raw_cols and not c.endswith("_Pct")
+  ]
+
+  # Converter notas brutas para percentagem (escala de 1 a 5 -> 0 a 100%)
+  for col in item_cols:
     pct_col_name = f"{col}_Pct"
-    val_g = df_filtered[pct_col_name].mean()
-    if not pd.isna(val_g):
-      obj_val = st.session_state.get(col, 90.0)
-      delta_calc = (val_g / obj_val) - 1
-      valid_cols.append({
-          "Rubrica": col,
-          "Media": val_g,
-          "Objetivo": obj_val,
-          "Delta": delta_calc,
-      })
+    if pct_col_name not in df.columns:
+      df[col] = pd.to_numeric(df[col], errors="coerce")
+      df[pct_col_name] = df[col] * 20.0
 
-  if valid_cols:
-    df_sec = pd.DataFrame(valid_cols)
-    cols_per_row = 2
-    rows = [
-        df_sec.iloc[i : i + cols_per_row]
-        for i in range(0, len(df_sec), cols_per_row)
+  pct_rubric_cols = [f"{c}_Pct" for c in item_cols]
+
+  # Cálculo da Taxa de Resposta com base na coluna 'distribuidos'
+  if "distribuidos" in df.columns:
+    df["distribuidos"] = pd.to_numeric(df["distribuidos"], errors="coerce")
+    df["Taxa_Resposta_Inquerito"] = (
+        1 / df["distribuidos"].replace(0, pd.NA)
+    ) * 100.0
+    df["Taxa_Resposta_Inquerito"] = df["Taxa_Resposta_Inquerito"].fillna(0)
+  else:
+    df["Taxa_Resposta_Inquerito"] = 0.0
+
+  # Cálculo da Satisfação Geral Global em percentagem
+  if pct_rubric_cols:
+    df["Geral_Pct"] = df[pct_rubric_cols].mean(axis=1)
+  else:
+    df["Geral_Pct"] = 0.0
+
+  st.sidebar.markdown("---")
+  st.sidebar.header("Filtros de Segmentação")
+
+  if "Data" in df.columns and not df["Data"].dropna().empty:
+    min_date = df["Data"].min().date()
+    max_date = df["Data"].max().date()
+    date_range = st.sidebar.date_input(
+        "Selecionar Intervalo de Datas",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date,
+    )
+    if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
+      start_date, end_date = date_range
+      df_filtered = df[
+          (df["Data"].dt.date >= start_date) & (df["Data"].dt.date <= end_date)
+      ].copy()
+    else:
+      df_filtered = df.copy()
+  else:
+    df_filtered = df.copy()
+
+  anos_disponiveis = sorted(
+      [int(a) for a in df_filtered["Ano"].dropna().unique()]
+  )
+  anos_selecionados = st.sidebar.multiselect(
+      "Selecionar Anos", options=anos_disponiveis, default=anos_disponiveis
+  )
+  if anos_selecionados:
+    df_filtered = df_filtered[df_filtered["Ano"].isin(anos_selecionados)]
+
+  meses_ordem = [
+      "Janeiro",
+      "Fevereiro",
+      "Março",
+      "Abril",
+      "Maio",
+      "Junho",
+      "Julho",
+      "Agosto",
+      "Setembro",
+      "Outubro",
+      "Novembro",
+      "Dezembro",
+  ]
+  meses_disponiveis = sorted(
+      df_filtered["Mês"].dropna().unique(),
+      key=lambda x: meses_ordem.index(x) if x in meses_ordem else 99,
+  )
+  meses_selecionados = st.sidebar.multiselect(
+      "Selecionar Meses", options=meses_disponiveis, default=meses_disponiveis
+  )
+  if meses_selecionados:
+    df_filtered = df_filtered[df_filtered["Mês"].isin(meses_selecionados)]
+
+  nacionalidades_disponiveis = sorted(
+      [str(n) for n in df_filtered["Nacionalidade"].dropna().unique()]
+  )
+  nacionalidades_selecionadas = st.sidebar.multiselect(
+      "Selecionar Nacionalidades",
+      options=nacionalidades_disponiveis,
+      default=nacionalidades_disponiveis,
+  )
+  if nacionalidades_selecionadas:
+    df_filtered = df_filtered[
+        df_filtered["Nacionalidade"].astype(str).isin(nacionalidades_selecionadas)
     ]
 
-    for row_df in rows:
-      grid_cols = st.columns(len(row_df))
-      for i, (_, row_item) in enumerate(row_df.iterrows()):
-        rubrica_nome = row_item["Rubrica"]
-        valor_m = row_item["Media"]
-        obj_m = row_item["Objetivo"]
-        delta_m = row_item["Delta"]
+  if "Quarto" in df_filtered.columns:
+    quartos_disponiveis = sorted([
+        str(q) for q in df_filtered["Quarto"].dropna().unique()
+    ])
+    quartos_selecionados = st.sidebar.multiselect(
+        "Filtrar por Quarto", options=quartos_disponiveis
+    )
+    if quartos_selecionados:
+      df_filtered = df_filtered[
+          df_filtered["Quarto"].astype(str).isin(quartos_selecionados)
+      ]
 
-        fig_ind = go.Figure(
-            go.Indicator(
-                mode="gauge+number+delta",
-                value=valor_m,
-                delta={
-                    "reference": obj_m,
-                    "relative": True,
-                    "valueformat": "+.1%",
-                },
-                title={
-                    "text": f"{rubrica_nome}<br><span style='font-size:11px;color:gray;'>Objetivo: {obj_m:.0f}%</span>",
-                    "font": {"size": 13},
-                },
-                number={"suffix": "%", "font": {"size": 20}},
-                gauge={
-                    "axis": {"range": [0, 100], "tickwidth": 1},
-                    "bar": {"color": "#1f77b4"},
-                    "steps": [
-                        {"range": [0, obj_m], "color": "#ffcccc"},
-                        {
-                            "range": [obj_m, 100],
-                            "color": "#c6efce",
-                        },
-                    ],
-                    "threshold": {
-                        "line": {"color": "red", "width": 3},
-                        "thickness": 0.8,
-                        "value": obj_m,
+  st.sidebar.markdown("---")
+  st.sidebar.header("🎯 Gestão de Objetivos (%)")
+
+  if "objetivo_geral" not in st.session_state:
+    st.session_state.objetivo_geral = 90.0
+  if "objetivo_taxa_resp" not in st.session_state:
+    st.session_state.objetivo_taxa_resp = 75.0
+
+  st.sidebar.slider(
+      "Objetivo Global de Satisfação (%)",
+      50.0,
+      100.0,
+      key="objetivo_geral",
+      step=1.0,
+  )
+  st.sidebar.slider(
+      "Objetivo de Taxa de Resposta (%)",
+      50.0,
+      100.0,
+      key="objetivo_taxa_resp",
+      step=1.0,
+  )
+
+  st.sidebar.markdown("### Objetivos por Rubrica")
+  objetivos_especificos = {}
+  for col in item_cols:
+    nome_limpo = col.replace("_Pct", "")
+    if nome_limpo not in st.session_state:
+      st.session_state[nome_limpo] = 90.0
+    objetivos_especificos[nome_limpo] = st.sidebar.slider(
+        f"Meta: {nome_limpo[:25]}...", 50.0, 100.0, key=nome_limpo, step=1.0
+    )
+
+  anos_str = (
+      ", ".join(map(str, anos_selecionados))
+      if anos_selecionados
+      else "Todos"
+  )
+  meses_str = ", ".join(meses_selecionados) if meses_selecionados else "Todos"
+  st.info(
+      f"📅 **Período Selecionado:** Anos: `{anos_str}` | Meses: `{meses_str}`"
+  )
+
+  total_inqueritos = len(df_filtered)
+  if not df_filtered.empty:
+    satisfacao_geral = df_filtered["Geral_Pct"].mean()
+    taxa_resposta_media = df_filtered["Taxa_Resposta_Inquerito"].mean()
+  else:
+    satisfacao_geral = 0
+    taxa_resposta_media = 0
+
+  col_metricas, col_gauge1, col_gauge2 = st.columns([1, 1.5, 1.5])
+
+  with col_metricas:
+    st.metric("Inquéritos Analisados", f"{total_inqueritos}")
+    if "Nacionalidade" in df_filtered.columns:
+      st.metric(
+          "Nacionalidades", f"{df_filtered['Nacionalidade'].nunique()}"
+      )
+
+  with col_gauge1:
+    fig_gauge_sat = go.Figure(
+        go.Indicator(
+            mode="gauge+number+delta",
+            value=satisfacao_geral,
+            delta={
+                "reference": st.session_state.objetivo_geral,
+                "relative": False,
+                "valueformat": "+.1f",
+            },
+            title={"text": "Satisfação Geral (%)", "font": {"size": 16}},
+            number={"suffix": "%", "font": {"size": 24}},
+            gauge={
+                "axis": {"range": [0, 100], "tickwidth": 1},
+                "bar": {"color": "#1f77b4"},
+                "steps": [
+                    {
+                        "range": [0, st.session_state.objetivo_geral],
+                        "color": "#ffcccc",
                     },
+                    {
+                        "range": [st.session_state.objetivo_geral, 100],
+                        "color": "#c6efce",
+                    },
+                ],
+                "threshold": {
+                    "line": {"color": "red", "width": 4},
+                    "thickness": 0.8,
+                    "value": st.session_state.objetivo_geral,
                 },
-            )
+            },
         )
-        fig_ind.update_layout(
-            height=210, margin=dict(t=45, b=10, l=15, r=15)
+    )
+    fig_gauge_sat.update_layout(height=220, margin=dict(t=30, b=10, l=20, r=20))
+    st.plotly_chart(fig_gauge_sat, use_container_width=True)
+
+  with col_gauge2:
+    fig_gauge_resp = go.Figure(
+        go.Indicator(
+            mode="gauge+number+delta",
+            value=taxa_resposta_media,
+            delta={
+                "reference": st.session_state.objetivo_taxa_resp,
+                "relative": False,
+                "valueformat": "+.1f",
+            },
+            title={"text": "Taxa de Resposta Média (%)", "font": {"size": 16}},
+            number={"suffix": "%", "font": {"size": 24}},
+            gauge={
+                "axis": {"range": [0, 100], "tickwidth": 1},
+                "bar": {"color": "#2ca02c"},
+                "steps": [
+                    {
+                        "range": [0, st.session_state.objetivo_taxa_resp],
+                        "color": "#ffcccc",
+                    },
+                    {
+                        "range": [st.session_state.objetivo_taxa_resp, 100],
+                        "color": "#c6efce",
+                    },
+                ],
+                "threshold": {
+                    "line": {"color": "red", "width": 4},
+                    "thickness": 0.8,
+                    "value": st.session_state.objetivo_taxa_resp,
+                },
+            },
         )
-        grid_cols[i].plotly_chart(fig_ind, use_container_width=True)
+    )
+    fig_gauge_resp.update_layout(height=220, margin=dict(t=30, b=10, l=20, r=20))
+    st.plotly_chart(fig_gauge_resp, use_container_width=True)
+
   st.markdown("---")
 
+  st.subheader("📈 Evolução Temporal de Indicadores")
+  if not df_filtered.empty and "Data" in df_filtered.columns:
+    temporal_options = ["Geral_Pct"] + pct_rubric_cols
+    indicador_selecionado = st.selectbox(
+        "Selecione o Indicador para Análise Temporal:",
+        options=temporal_options,
+        format_func=lambda x: "Satisfação Global (%)"
+        if x == "Geral_Pct"
+        else x.replace("_Pct", ""),
+    )
 
-seccoes = {
-    "Front-Office": [
-        c for c in item_cols if c.startswith("Front-Office -")
-    ],
-    "Quartos": [c for c in item_cols if c.startswith("Quarto -")],
-    "Pequeno-Almoço": [
-        c for c in item_cols if c.startswith("Pequeno-Almoço -")
-    ],
-    "Restaurante / Bar": [
-        c for c in item_cols if c.startswith("Restaurante / Bar -")
-    ],
-    "Outros Serviços e Instalações": [
-        c
-        for c in item_cols
-        if not c.startswith(
-            ("Front-Office -", "Quarto -", "Pequeno-Almoço -", "Restaurante / Bar -")
-        )
-    ],
-}
+    df_temp = (
+        df_filtered.set_index("Data")
+        .resample("ME")[indicador_selecionado]
+        .mean()
+        .dropna()
+        .reset_index()
+    )
+    df_temp["Media (%)"] = df_temp[indicador_selecionado]
 
-for sec_nome, sec_colunas in seccoes.items():
-  if sec_colunas:
-    render_gauge_grid(sec_colunas, sec_nome)
+    fig_temp = px.line(
+        df_temp,
+        x="Data",
+        y="Media (%)",
+        markers=True,
+        title=f"Evolução Mensal: {indicador_selecionado.replace('_Pct', '')}",
+        line_shape="spline",
+    )
 
-st.sidebar.markdown("---")
-st.sidebar.header("📥 Exportar Relatório")
-csv_data = df_filtered.to_csv(index=False).encode("utf-8")
-st.sidebar.download_button(
-    label="Descarregar Dados Filtrados (CSV)",
-    data=csv_data,
-    file_name="relatorio_satisfacao_hotel_alisios.csv",
-    mime="text/csv",
-)
+    nome_limpo = indicador_selecionado.replace("_Pct", "")
+    obj_atual = (
+        st.session_state.objetivo_geral
+        if nome_limpo in ["Geral", "Satisfação Global"]
+        else st.session_state.get(nome_limpo, 90.0)
+    )
+    fig_temp.add_hline(
+        y=obj_atual,
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"Objetivo ({obj_atual:.0f}%)",
+    )
+    fig_temp.update_layout(height=300, yaxis=dict(range=[50, 105]))
+    st.plotly_chart(fig_temp, use_container_width=True)
 
-with st.expander("Ver dados detalhados filtrados"):
-  st.dataframe(df_filtered)
+  st.markdown("---")
+
+  st.subheader("Análise por Secção")
+
+
+  def render_gauge_grid(cols_list, seccao_titulo):
+    st.markdown(f"### 🏨 Secção: {seccao_titulo}")
+    valid_cols = []
+    for col in cols_list:
+      pct_col_name = f"{col}_Pct"
+      if pct_col_name in df_filtered.columns:
+        val_g = df_filtered[pct_col_name].mean()
+        if not pd.isna(val_g):
+          obj_val = st.session_state.get(col, 90.0)
+          delta_calc = (val_g / obj_val) - 1
+          valid_cols.append({
+              "Rubrica": col,
+              "Media": val_g,
+              "Objetivo": obj_val,
+              "Delta": delta_calc,
+          })
+
+    if valid_cols:
+      df_sec = pd.DataFrame(valid_cols)
+      cols_per_row = 2
+      rows = [
+          df_sec.iloc[i : i + cols_per_row]
+          for i in range(0, len(df_sec), cols_per_row)
+      ]
+
+      for row_df in rows:
+        grid_cols = st.columns(len(row_df))
+        for i, (_, row_item) in enumerate(row_df.iterrows()):
+          rubrica_nome = row_item["Rubrica"]
+          valor_m = row_item["Media"]
+          obj_m = row_item["Objetivo"]
+          delta_m = row_item["Delta"]
+
+          fig_ind = go.Figure(
+              go.Indicator(
+                  mode="gauge+number+delta",
+                  value=valor_m,
+                  delta={
+                      "reference": obj_m,
+                      "relative": True,
+                      "valueformat": "+.1%",
+                  },
+                  title={
+                      "text": f"{rubrica_nome}<br><span style='font-size:11px;color:gray;'>Objetivo: {obj_m:.0f}%</span>",
+                      "font": {"size": 13},
+                  },
+                  number={"suffix": "%", "font": {"size": 20}},
+                  gauge={
+                      "axis": {"range": [0, 100], "tickwidth": 1},
+                      "bar": {"color": "#1f77b4"},
+                      "steps": [
+                          {"range": [0, obj_m], "color": "#ffcccc"},
+                          {
+                              "range": [obj_m, 100],
+                              "color": "#c6efce",
+                          },
+                      ],
+                      "threshold": {
+                          "line": {"color": "red", "width": 3},
+                          "thickness": 0.8,
+                          "value": obj_m,
+                      },
+                  },
+              )
+          )
+          fig_ind.update_layout(
+              height=210, margin=dict(t=45, b=10, l=15, r=15)
+          )
+          grid_cols[i].plotly_chart(fig_ind, use_container_width=True)
+    st.markdown("---")
+
+
+  seccoes = {
+      "Front-Office": [
+          c for c in item_cols if c.startswith("Front-Office -")
+      ],
+      "Quartos": [c for c in item_cols if c.startswith("Quarto -")],
+      "Pequeno-Almoço": [
+          c for c in item_cols if c.startswith("Pequeno-Almoço -")
+      ],
+      "Restaurante / Bar": [
+          c for c in item_cols if c.startswith("Restaurante / Bar -")
+      ],
+      "Outros Serviços e Instalações": [
+          c
+          for c in item_cols
+          if not c.startswith(
+              (
+                  "Front-Office -",
+                  "Quarto -",
+                  "Pequeno-Almoço -",
+                  "Restaurante / Bar -",
+              )
+          )
+      ],
+  }
+
+  for sec_nome, sec_colunas in seccoes.items():
+    if sec_colunas:
+      render_gauge_grid(sec_colunas, sec_nome)
+
+  st.sidebar.markdown("---")
+  st.sidebar.header("📥 Exportar Relatório")
+  csv_data = df_filtered.to_csv(index=False).encode("utf-8")
+  st.sidebar.download_button(
+      label="Descarregar Dados Filtrados (CSV)",
+      data=csv_data,
+      file_name="relatorio_satisfacao_hotel_alisios.csv",
+      mime="text/csv",
+  )
+
+  with st.expander("Ver dados detalhados filtrados"):
+    st.dataframe(df_filtered)
+
+else:
+  st.warning(
+      "Por favor, faça o upload do seu ficheiro Excel (`.xlsx`) na barra"
+      " lateral para carregar o dashboard."
+  )
