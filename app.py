@@ -2,6 +2,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from fpdf import FPDF
+import tempfile
+import os
 
 st.set_page_config(
     page_title="Análise de Inquéritos de Satisfação - Hotel Alísios",
@@ -192,7 +195,6 @@ if df is not None and not df.empty:
             vals_geral = df_filtered["Geral_Excel_Pct"].dropna()
             satisfacao_geral = float(vals_geral.mean()) if len(vals_geral) > 0 else 0.0
         else:
-            # MÉTODO DAS LINHAS: Média horizontal por inquérito (com proteção contra NaNs)
             row_means = df_filtered[pct_rubric_cols].mean(axis=1, skipna=True)
             row_means_clean = row_means.dropna()
             satisfacao_geral = float(row_means_clean.mean()) if not row_means_clean.empty else 0.0
@@ -256,6 +258,31 @@ if df is not None and not df.empty:
         fig_gauge_resp.update_layout(height=230, margin=dict(t=65, b=10, l=20, r=20))
         st.plotly_chart(fig_gauge_resp, use_container_width=True)
 
+    # ---------------------------------------------------------
+    # PAINEL DE DESTAQUES (TOP & FLOPS)
+    # ---------------------------------------------------------
+    st.markdown("---")
+    st.subheader("🏆 Painel de Destaques Operacionais")
+
+    resumo_rubricas = []
+    for col in item_cols:
+        pct_col = f"{col}_Pct"
+        if pct_col in df_filtered.columns:
+            s_val = df_filtered[pct_col].dropna()
+            if not s_val.empty:
+                resumo_rubricas.append({"Rubrica": col, "Média": float(s_val.mean())})
+
+    if resumo_rubricas:
+        df_resumo = pd.DataFrame(resumo_rubricas).sort_values(by="Média", ascending=False)
+        top_item = df_resumo.iloc[0]
+        flop_item = df_resumo.iloc[-1]
+
+        col_top, col_flop = st.columns(2)
+        with col_top:
+            st.success(f"🌟 **Ponto Forte (Top Performance):**\n\n `{top_item['Rubrica']}` com **{top_item['Média']:.2f}%** de satisfação.")
+        with col_flop:
+            st.warning(f"⚠️ **Ponto Crítico (Área de Atenção):**\n\n `{flop_item['Rubrica']}` com **{flop_item['Média']:.2f}%** de satisfação.")
+
     st.markdown("---")
 
     # ---------------------------------------------------------
@@ -315,7 +342,6 @@ if df is not None and not df.empty:
             col_original = col
             pct_col_name = f"{col}_Pct"
             if pct_col_name in df_filtered.columns:
-                # MÉDIA POR COLUNA: Média simples da coluna em percentagem, ignorando NaNs
                 serie_valida = df_filtered[pct_col_name].dropna()
                 n_respostas = len(serie_valida)
                 
@@ -439,13 +465,74 @@ if df is not None and not df.empty:
     st.markdown("---")
 
     # ---------------------------------------------------------
-    # EXPORTAÇÃO E TABELA DETALHADA
+    # GERAÇÃO DE RELATÓRIO EXECUTIVO EM PDF
     # ---------------------------------------------------------
     st.sidebar.markdown("---")
-    st.sidebar.header("📥 Exportar Relatório")
+    st.sidebar.header("📥 Exportar Relatórios")
+
+    class PDFReport(FPDF):
+        def header(self):
+            self.set_font('helvetica', 'B', 14)
+            self.cell(0, 10, 'Relatório Executivo de Satisfação - Hotel Alísios', 0, 1, 'C')
+            self.set_font('helvetica', 'I', 9)
+            self.cell(0, 6, f'Filtros: Anos: {anos_str} | Meses: {meses_str}', 0, 1, 'C')
+            self.ln(5)
+
+        def footer(self):
+            self.set_y(-15)
+            self.set_font('helvetica', 'I', 8)
+            self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
+
+    def generate_pdf():
+        pdf = PDFReport()
+        pdf.add_page()
+        pdf.set_font('helvetica', '', 10)
+
+        # Resumo de Indicadores Principais
+        pdf.set_font('helvetica', 'B', 12)
+        pdf.cell(0, 8, '1. Indicadores Globais', 0, 1)
+        pdf.set_font('helvetica', '', 10)
+        pdf.cell(0, 6, f'- Total de Inquéritos Analisados: {total_inqueritos}', 0, 1)
+        pdf.cell(0, 6, f'- Satisfação Geral: {satisfacao_geral:.2f}% (Objetivo: {st.session_state.objetivo_geral:.1f}%)', 0, 1)
+        pdf.cell(0, 6, f'- Taxa de Resposta Média: {taxa_resposta_media:.2f}% (Objetivo: {st.session_state.objetivo_taxa_resp:.1f}%)', 0, 1)
+        pdf.ln(5)
+
+        # Tabela de Rubricas
+        pdf.set_font('helvetica', 'B', 12)
+        pdf.cell(0, 8, '2. Desempenho por Rubrica', 0, 1)
+        pdf.set_font('helvetica', 'B', 9)
+        pdf.cell(130, 7, 'Rubrica', 1)
+        pdf.cell(30, 7, 'Média (%)', 1, 0, 'C')
+        pdf.cell(30, 7, 'Respostas (N)', 1, 1, 'C')
+
+        pdf.set_font('helvetica', '', 9)
+        for r in resumo_rubricas:
+            nome_rub = r['Rubrica'][:65]
+            med_val = f"{r['Média']:.2f}%"
+            n_val = str(len(df_filtered[f"{r['Rubrica']}_Pct"].dropna()))
+            pdf.cell(130, 6, nome_rub, 1)
+            pdf.cell(30, 6, med_val, 1, 0, 'C')
+            pdf.cell(30, 6, n_val, 1, 1, 'C')
+
+        # Gravar em ficheiro temporário
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        pdf.output(temp_file.name)
+        return temp_file.name
+
+    if st.sidebar.button("📄 Gerar Relatório Executivo (PDF)"):
+        pdf_path = generate_pdf()
+        with open(pdf_path, "rb") as pdf_file:
+            st.sidebar.download_button(
+                label="⬇️ Descarregar PDF Gerado",
+                data=pdf_file,
+                file_name="relatorio_executivo_hotel_alisios.pdf",
+                mime="application/pdf",
+            )
+        os.unlink(pdf_path)
+
     csv_data = df_filtered.to_csv(index=False).encode("utf-8")
     st.sidebar.download_button(
-        label="Descarregar Dados Filtrados (CSV)",
+        label="📥 Descarregar Dados Filtrados (CSV)",
         data=csv_data,
         file_name="relatorio_satisfacao_hotel_alisios.csv",
         mime="text/csv",
