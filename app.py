@@ -81,9 +81,8 @@ if df is not None and not df.empty:
         "Geral",
     ]
 
-    # 2. Colunas de Resposta Binária / Motivos (Ignoradas nas médias de escala 1 a 5)
+    # 2. Colunas de Resposta Binária / Motivos (EXCLUÍDA DAQUI A PREOCUPAÇÃO AMBIENTAL, POIS É ESCALA 1-5)
     binary_cols = [
-        "Preocupações Ambientais",
         "Localização ",
         "Preço",
         "Qualidade",
@@ -93,7 +92,7 @@ if df is not None and not df.empty:
         "Tenciona Voltar",
     ]
 
-    # 3. Rubricas de Avaliação genuínas (Escala de 1 a 5)
+    # 3. Rubricas de Avaliação genuínas (Escala de 1 a 5, inclui agora "Preocupações Ambientais")
     item_cols = [
         c
         for c in df.columns
@@ -406,7 +405,7 @@ if df is not None and not df.empty:
     st.markdown("---")
 
     # ---------------------------------------------------------
-    # ANÁLISE POR SECÇÃO (COM NÚMERO DE RESPOSTAS NO TÍTULO)
+    # ANÁLISE POR SECÇÃO (INCLUI "Preocupações Ambientais" COMO GAUGE)
     # ---------------------------------------------------------
     st.subheader("Análise por Secção")
 
@@ -417,7 +416,6 @@ if df is not None and not df.empty:
         for col in cols_list:
             pct_col_name = f"{col}_Pct"
             if pct_col_name in df_filtered.columns:
-                # Contar apenas as respostas válidas (não nulas) para esta rubrica específica
                 serie_valida = df_filtered[pct_col_name].dropna()
                 n_respostas = len(serie_valida)
                 
@@ -520,9 +518,9 @@ if df is not None and not df.empty:
             render_gauge_grid(sec_colunas, sec_nome)
 
     # ---------------------------------------------------------
-    # ANÁLISE DE VARIÁVEIS DE RESPOSTA 0 E 1
+    # ANÁLISE DE VARIÁVEIS DE RESPOSTA 0 E 1 (APENAS MOTIVOS E FIDELIZAÇÃO)
     # ---------------------------------------------------------
-    st.subheader("🎯 Análise de Motivos de Escolha, Fidelização e Ambientais")
+    st.subheader("🎯 Análise de Motivos de Escolha e Fidelização")
 
 
     def clean_binary(series):
@@ -564,15 +562,15 @@ if df is not None and not df.empty:
         else:
             st.info("Colunas de motivos de escolha não encontradas.")
 
-    # 2. Fidelização e Preocupações Ambientais (Métricas)
-    fid_env_cols = ["Recomendaria", "Tenciona Voltar", "Preocupações Ambientais"]
+    # 2. Fidelização (Métricas)
+    loyalty_cols = ["Recomendaria", "Tenciona Voltar"]
 
     with col_bin2:
-        st.markdown("#### Fidelização e Indicadores Ambientais")
+        st.markdown("#### Fidelização e Recomendação")
         st.write("Proporção de respostas afirmativas no período selecionado:")
 
-        cols_metricas_bin = st.columns(len(fid_env_cols))
-        for idx, col_name in enumerate(fid_env_cols):
+        cols_metricas_bin = st.columns(len(loyalty_cols))
+        for idx, col_name in enumerate(loyalty_cols):
             with cols_metricas_bin[idx]:
                 if col_name in df_filtered.columns:
                     s_bin = clean_binary(df_filtered[col_name])
