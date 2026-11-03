@@ -15,7 +15,7 @@ st.set_page_config(
 st.title("Análise de Inquéritos de Satisfação")
 st.markdown(
     "Hotel Alísios — Gestão dinâmica de inquéritos, objetivos, evolução"
-    " temporal detalhada e análise por secção."
+    " temporal detalhada, análise por secção e modelação preditiva."
 )
 
 # ---------------------------------------------------------
@@ -582,6 +582,90 @@ if df is not None and not df.empty:
     st.markdown("---")
 
     # ---------------------------------------------------------
+    # MODELO PREDITIVO COM SCIKIT-LEARN
+    # ---------------------------------------------------------
+    st.subheader("🤖 Modelo Preditivo de Satisfação (Scikit-Learn)")
+    st.markdown(
+        "Preveja a probabilidade de um cliente atribuir uma classificação positiva "
+        "com base na sua **Nacionalidade** e **Quarto**."
+    )
+
+    try:
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.model_selection import train_test_split
+        from sklearn.preprocessing import OneHotEncoder
+        from sklearn.compose import ColumnTransformer
+        from sklearn.pipeline import Pipeline
+        from sklearn.metrics import accuracy_score
+
+        df_model = df_filtered.copy()
+        
+        if "Geral_Pct_Row" not in df_model.columns:
+            df_model["Geral_Pct_Row"] = df_model[pct_rubric_cols].mean(axis=1, skipna=True)
+
+        meta_alvo = st.session_state.objetivo_geral
+        df_model["Target_Positivo"] = (df_model["Geral_Pct_Row"] >= meta_alvo).astype(int)
+
+        features = ["Nacionalidade", "Quarto"]
+        df_model = df_model.dropna(subset=features + ["Target_Positivo"])
+
+        if len(df_model) > 30 and df_model["Target_Positivo"].nunique() > 1:
+            X = df_model[features].astype(str)
+            y = df_model["Target_Positivo"]
+
+            preprocessor = ColumnTransformer(
+                transformers=[
+                    ("cat", OneHotEncoder(handle_unknown="ignore"), features)
+                ]
+            )
+            
+            model = Pipeline(steps=[
+                ("preprocessor", preprocessor),
+                ("classifier", LogisticRegression(max_iter=1000))
+            ])
+
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            model.fit(X_train, y_train)
+            
+            y_pred = model.predict(X_test)
+            acc = accuracy_score(y_test, y_pred)
+
+            st.info(f"📊 **Precisão do Modelo (Test Set):** `{acc * 100:.1f}%` (Treinado com {len(X)} registos históricos)")
+
+            st.markdown("#### Simular Novo Cliente")
+            col_sim1, col_sim2 = st.columns(2)
+
+            with col_sim1:
+                nacionalidades_disponiveis_mod = sorted(df_model["Nacionalidade"].astype(str).unique())
+                input_nacionalidade = st.selectbox("Nacionalidade do Cliente", options=nacionalidades_disponiveis_mod)
+
+            with col_sim2:
+                quartos_disponiveis_mod = sorted(df_model["Quarto"].astype(str).unique())
+                input_quarto = st.selectbox("Quarto Atribuído", options=quartos_disponiveis_mod)
+
+            if st.button("🔮 Calcular Probabilidade de Satisfação Positiva"):
+                dados_novo_cliente = pd.DataFrame({
+                    "Nacionalidade": [input_nacionalidade],
+                    "Quarto": [input_quarto]
+                })
+                
+                probabilidade = model.predict_proba(dados_novo_cliente)[0][1] * 100
+                
+                if probabilidade >= 70:
+                    st.success(f"🌟 **Alta Probabilidade de Satisfação:** `{probabilidade:.1f}%` (Cliente com forte tendência a superar a meta de {meta_alvo:.0f}%).")
+                elif probabilidade >= 40:
+                    st.warning(f"⚠️ **Probabilidade Moderada:** `{probabilidade:.1f}%` (Requer atenção redobrada neste segmento).")
+                else:
+                    st.error(f"🔴 **Baixa Probabilidade:** `{probabilidade:.1f}%` (Risco elevado de feedback abaixo do objetivo).")
+        else:
+            st.warning("⚠️ Dados insuficientes ou com variabilidade limitada no período selecionado para treinar o modelo preditivo (são necessários pelo menos 30 registos variados).")
+
+    except ImportError:
+        st.error("⚠️ A biblioteca `scikit-learn` não está instalada no ambiente. Adicione `scikit-learn` ao seu ficheiro `requirements.txt`.")
+
+    st.markdown("---")
+
+    # ---------------------------------------------------------
     # GERAÇÃO DE RELATÓRIO EXECUTIVO EM PDF
     # ---------------------------------------------------------
     st.sidebar.markdown("---")
@@ -605,6 +689,7 @@ if df is not None and not df.empty:
         pdf.add_page()
         pdf.set_font('helvetica', '', 10)
 
+        # 1. Indicadores Globais
         pdf.set_font('helvetica', 'B', 12)
         pdf.cell(0, 8, '1. Indicadores Globais', 0, 1)
         pdf.set_font('helvetica', '', 10)
@@ -613,6 +698,7 @@ if df is not None and not df.empty:
         pdf.cell(0, 6, f'- Taxa de Resposta Média: {taxa_resposta_media:.2f}% (Objetivo: {st.session_state.objetivo_taxa_resp:.1f}%)', 0, 1)
         pdf.ln(5)
 
+        # 2. Desempenho por Rubrica
         pdf.set_font('helvetica', 'B', 12)
         pdf.cell(0, 8, '2. Desempenho por Rubrica', 0, 1)
         pdf.set_font('helvetica', 'B', 9)
@@ -628,6 +714,48 @@ if df is not None and not df.empty:
             pdf.cell(130, 6, nome_rub, 1)
             pdf.cell(30, 6, med_val, 1, 0, 'C')
             pdf.cell(30, 6, n_val, 1, 1, 'C')
+        pdf.ln(5)
+
+        # 3. Análise Preditiva (Scikit-Learn)
+        pdf.set_font('helvetica', 'B', 12)
+        pdf.cell(0, 8, '3. Sumário do Modelo Preditivo (Scikit-Learn)', 0, 1)
+        pdf.set_font('helvetica', '', 10)
+        
+        try:
+            from sklearn.linear_model import LogisticRegression
+            from sklearn.model_selection import train_test_split
+            from sklearn.preprocessing import OneHotEncoder
+            from sklearn.compose import ColumnTransformer
+            from sklearn.pipeline import Pipeline
+            from sklearn.metrics import accuracy_score
+
+            df_model_pdf = df_filtered.copy()
+            if "Geral_Pct_Row" not in df_model_pdf.columns:
+                df_model_pdf["Geral_Pct_Row"] = df_model_pdf[pct_rubric_cols].mean(axis=1, skipna=True)
+
+            meta_alvo = st.session_state.objetivo_geral
+            df_model_pdf["Target_Positivo"] = (df_model_pdf["Geral_Pct_Row"] >= meta_alvo).astype(int)
+            features = ["Nacionalidade", "Quarto"]
+            df_model_pdf = df_model_pdf.dropna(subset=features + ["Target_Positivo"])
+
+            if len(df_model_pdf) > 30 and df_model_pdf["Target_Positivo"].nunique() > 1:
+                X = df_model_pdf[features].astype(str)
+                y = df_model_pdf["Target_Positivo"]
+
+                preprocessor = ColumnTransformer(transformers=[("cat", OneHotEncoder(handle_unknown="ignore"), features)])
+                model = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", LogisticRegression(max_iter=1000))])
+                
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+                model.fit(X_train, y_train)
+                acc = accuracy_score(y_test, model.predict(X_test))
+
+                pdf.cell(0, 6, f'- Estado do Modelo: Treinado com sucesso ({len(X)} registos históricos)', 0, 1)
+                pdf.cell(0, 6, f'- Precisão Preditiva (Test Set): {acc * 100:.1f}%', 0, 1)
+                pdf.cell(0, 6, f'- Critério de Sucesso: Classificação global >= {meta_alvo:.0f}%', 0, 1)
+            else:
+                pdf.cell(0, 6, '- Modelo Preditivo: Dados insuficientes no período selecionado para treino fiável.', 0, 1)
+        except Exception:
+            pdf.cell(0, 6, '- Modelo Preditivo: Indisponível ou erro no carregamento da biblioteca Scikit-Learn.', 0, 1)
 
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         pdf.output(temp_file.name)
