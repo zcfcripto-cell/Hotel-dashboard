@@ -6,3 +6,4 @@ seaborn
 matplotlib
 numpy
 fpdf2
+scikit-learn
