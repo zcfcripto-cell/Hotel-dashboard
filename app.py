@@ -785,3 +785,54 @@ if df is not None and not df.empty:
 
 else:
     st.warning("Por favor, faça o upload do seu ficheiro Excel (`.xlsx`) na barra lateral para carregar o dashboard.")
+# ---------------------------------------------------------
+# ANÁLISE DE SATISFAÇÃO POR NACIONALIDADE
+# ---------------------------------------------------------
+st.markdown("---")
+st.subheader("🌍 Comparação de Satisfação por Nacionalidade")
+st.markdown("Avaliação da satisfação média global segmentada por país de origem dos hóspedes.")
+
+if "Nacionalidade" in df_filtered.columns and not df_filtered.empty:
+    if "Geral_Pct_Row" not in df_filtered.columns:
+        df_filtered["Geral_Pct_Row"] = df_filtered[pct_rubric_cols].mean(axis=1, skipna=True)
+
+    # Agrupar por nacionalidade e calcular a média e a contagem de inquéritos
+    df_nac = df_filtered.groupby("Nacionalidade").agg(
+        Satisfacao_Media=("Geral_Pct_Row", "mean"),
+        Total_Inqueritos=("Geral_Pct_Row", "count")
+    ).reset_index().dropna(subset=["Satisfacao_Media"])
+
+    # Filtrar nacionalidades com pelo menos 1 inquérito (ou ajustar se quiser um mínimo maior)
+    df_nac = df_nac.sort_values(by="Satisfacao_Media", ascending=True)
+
+    if not df_nac.empty:
+        fig_nac = px.bar(
+            df_nac,
+            x="Satisfacao_Media",
+            y="Nacionalidade",
+            orientation="h",
+            text=df_nac["Satisfacao_Media"].apply(lambda v: f"{v:.1f}%"),
+            color="Satisfacao_Media",
+            color_continuous_scale="Blues",
+            labels={"Satisfacao_Media": "Satisfação Média Global (%)", "Nacionalidade": ""}
+        )
+        
+        # Adicionar linha vertical com a meta global atual para referência visual
+        fig_nac.add_vline(
+            x=st.session_state.objetivo_geral,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Meta ({st.session_state.objetivo_geral:.0f}%)",
+            annotation_position="top"
+        )
+        
+        fig_nac.update_layout(
+            height=max(350, len(df_nac) * 25),  # Ajusta dinamicamente a altura consoante o nº de nacionalidades
+            xaxis=dict(range=[0, 105]),
+            margin=dict(l=0, r=10, t=20, b=10)
+        )
+        st.plotly_chart(fig_nac, use_container_width=True)
+    else:
+        st.info("Não existem dados suficientes de nacionalidade para o período selecionado.")
+else:
+    st.info("A coluna 'Nacionalidade' não foi encontrada no ficheiro de dados.")
