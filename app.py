@@ -736,13 +736,29 @@ if df is not None and not df.empty:
         pdf.add_page()
         pdf.set_font('helvetica', '', 10)
 
-        # 1. Indicadores Globais
+        # 1. Indicadores Globais (com média geral e médias por ano em análise)
         pdf.set_font('helvetica', 'B', 12)
         pdf.cell(0, 8, '1. Indicadores Globais', 0, 1)
         pdf.set_font('helvetica', '', 10)
         pdf.cell(0, 6, f'- Total de Inquéritos Analisados: {total_inqueritos}', 0, 1)
-        pdf.cell(0, 6, f'- Satisfação Geral: {satisfacao_geral:.2f}% (Objetivo: {st.session_state.objetivo_geral:.1f}%)', 0, 1)
+        pdf.cell(0, 6, f'- Satisfação Geral Global: {satisfacao_geral:.2f}% (Objetivo: {st.session_state.objetivo_geral:.1f}%)', 0, 1)
         pdf.cell(0, 6, f'- Taxa de Resposta Média: {taxa_resposta_media:.2f}% (Objetivo: {st.session_state.objetivo_taxa_resp:.1f}%)', 0, 1)
+        
+        # Calcular e listar as médias por ano em análise
+        pdf.ln(2)
+        pdf.set_font('helvetica', 'B', 10)
+        pdf.cell(0, 6, 'Médias de Satisfação por Ano Selecionado:', 0, 1)
+        pdf.set_font('helvetica', '', 10)
+        
+        if "Ano" in df_filtered.columns and not df_filtered.empty:
+            anos_unicos = sorted(df_filtered["Ano"].dropna().unique())
+            for ano_val in anos_unicos:
+                df_ano_subset = df_filtered[df_filtered["Ano"] == ano_val]
+                if not df_ano_subset.empty:
+                    means_ano = df_ano_subset[pct_rubric_cols].mean(axis=1, skipna=True).dropna()
+                    media_ano_val = float(means_ano.mean()) if not means_ano.empty else 0.0
+                    n_ano = len(df_ano_subset)
+                    pdf.cell(0, 6, f'   * Ano {int(ano_val)}: {media_ano_val:.2f}% ({n_ano} inquéritos)', 0, 1)
         pdf.ln(5)
 
         # 2. Desempenho por Rubrica
