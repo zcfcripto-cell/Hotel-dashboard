@@ -15,7 +15,7 @@ st.set_page_config(
 st.title("Análise de Inquéritos de Satisfação")
 st.markdown(
     "Hotel Alísios — Gestão dinâmica de inquéritos, objetivos, evolução"
-    " temporal detalhada, análise por secção e modelação preditiva."
+    " temporal detalhada, análise por secção, nacionalidades e modelação preditiva."
 )
 
 # ---------------------------------------------------------
@@ -155,7 +155,7 @@ if df is not None and not df.empty:
             df_filtered = df_filtered[df_filtered["Quarto"].astype(str).isin(quartos_selecionados)]
 
     # ---------------------------------------------------------
-    # GESTÃO DE OBJETIVOS E CÁLCULO
+    # GESTÃO DE OBJETIVOS E CÁLCULO (ESTADO PERSISTENTE)
     # ---------------------------------------------------------
     st.sidebar.markdown("---")
     st.sidebar.header("🎯 Gestão de Objetivos & Cálculo")
@@ -163,7 +163,8 @@ if df is not None and not df.empty:
     metodo_calculo_geral = st.sidebar.selectbox(
         "Método de Cálculo da Satisfação Geral",
         options=["Média global (Método das Linhas)", "Coluna 'Geral' original do Excel"],
-        index=0
+        index=0,
+        key="metodo_calculo_geral_sel"
     )
 
     if "objetivo_geral" not in st.session_state:
@@ -405,6 +406,53 @@ if df is not None and not df.empty:
     st.markdown("---")
 
     # ---------------------------------------------------------
+    # COMPARAÇÃO DE SATISFAÇÃO POR NACIONALIDADE
+    # ---------------------------------------------------------
+    st.subheader("🌍 Comparação de Satisfação por Nacionalidade")
+    st.markdown("Avaliação da satisfação média global segmentada por país de origem dos hóspedes.")
+
+    if "Nacionalidade" in df_filtered.columns and not df_filtered.empty:
+        df_nac = df_filtered.groupby("Nacionalidade").agg(
+            Satisfacao_Media=("Geral_Pct_Row", "mean"),
+            Total_Inqueritos=("Geral_Pct_Row", "count")
+        ).reset_index().dropna(subset=["Satisfacao_Media"])
+
+        df_nac = df_nac.sort_values(by="Satisfacao_Media", ascending=True)
+
+        if not df_nac.empty:
+            fig_nac = px.bar(
+                df_nac,
+                x="Satisfacao_Media",
+                y="Nacionalidade",
+                orientation="h",
+                text=df_nac["Satisfacao_Media"].apply(lambda v: f"{v:.1f}%"),
+                color="Satisfacao_Media",
+                color_continuous_scale="Blues",
+                labels={"Satisfacao_Media": "Satisfação Média Global (%)", "Nacionalidade": ""}
+            )
+            
+            fig_nac.add_vline(
+                x=st.session_state.objetivo_geral,
+                line_dash="dash",
+                line_color="red",
+                annotation_text=f"Meta ({st.session_state.objetivo_geral:.0f}%)",
+                annotation_position="top"
+            )
+            
+            fig_nac.update_layout(
+                height=max(350, len(df_nac) * 25),
+                xaxis=dict(range=[0, 105]),
+                margin=dict(l=0, r=10, t=20, b=10)
+            )
+            st.plotly_chart(fig_nac, use_container_width=True)
+        else:
+            st.info("Não existem dados suficientes de nacionalidade para o período selecionado.")
+    else:
+        st.info("A coluna 'Nacionalidade' não foi encontrada no ficheiro de dados.")
+
+    st.markdown("---")
+
+    # ---------------------------------------------------------
     # EVOLUÇÃO TEMPORAL
     # ---------------------------------------------------------
     st.subheader("📈 Evolução Temporal de Indicadores")
@@ -637,202 +685,4 @@ if df is not None and not df.empty:
 
             with col_sim1:
                 nacionalidades_disponiveis_mod = sorted(df_model["Nacionalidade"].astype(str).unique())
-                input_nacionalidade = st.selectbox("Nacionalidade do Cliente", options=nacionalidades_disponiveis_mod)
-
-            with col_sim2:
-                quartos_disponiveis_mod = sorted(df_model["Quarto"].astype(str).unique())
-                input_quarto = st.selectbox("Quarto Atribuído", options=quartos_disponiveis_mod)
-
-            if st.button("🔮 Calcular Probabilidade de Satisfação Positiva"):
-                dados_novo_cliente = pd.DataFrame({
-                    "Nacionalidade": [input_nacionalidade],
-                    "Quarto": [input_quarto]
-                })
-                
-                probabilidade = model.predict_proba(dados_novo_cliente)[0][1] * 100
-                
-                if probabilidade >= 70:
-                    st.success(f"🌟 **Alta Probabilidade de Satisfação:** `{probabilidade:.1f}%` (Cliente com forte tendência a superar a meta de {meta_alvo:.0f}%).")
-                elif probabilidade >= 40:
-                    st.warning(f"⚠️ **Probabilidade Moderada:** `{probabilidade:.1f}%` (Requer atenção redobrada neste segmento).")
-                else:
-                    st.error(f"🔴 **Baixa Probabilidade:** `{probabilidade:.1f}%` (Risco elevado de feedback abaixo do objetivo).")
-        else:
-            st.warning("⚠️ Dados insuficientes ou com variabilidade limitada no período selecionado para treinar o modelo preditivo (são necessários pelo menos 30 registos variados).")
-
-    except ImportError:
-        st.error("⚠️ A biblioteca `scikit-learn` não está instalada no ambiente. Adicione `scikit-learn` ao seu ficheiro `requirements.txt`.")
-
-    st.markdown("---")
-
-    # ---------------------------------------------------------
-    # GERAÇÃO DE RELATÓRIO EXECUTIVO EM PDF
-    # ---------------------------------------------------------
-    st.sidebar.markdown("---")
-    st.sidebar.header("📥 Exportar Relatórios")
-
-    class PDFReport(FPDF):
-        def header(self):
-            self.set_font('helvetica', 'B', 14)
-            self.cell(0, 10, 'Relatório Executivo de Satisfação - Hotel Alísios', 0, 1, 'C')
-            self.set_font('helvetica', 'I', 9)
-            self.cell(0, 6, f'Filtros: Anos: {anos_str} | Meses: {meses_str}', 0, 1, 'C')
-            self.ln(5)
-
-        def footer(self):
-            self.set_y(-15)
-            self.set_font('helvetica', 'I', 8)
-            self.cell(0, 10, f'Página {self.page_no()}', 0, 0, 'C')
-
-    def generate_pdf():
-        pdf = PDFReport()
-        pdf.add_page()
-        pdf.set_font('helvetica', '', 10)
-
-        # 1. Indicadores Globais
-        pdf.set_font('helvetica', 'B', 12)
-        pdf.cell(0, 8, '1. Indicadores Globais', 0, 1)
-        pdf.set_font('helvetica', '', 10)
-        pdf.cell(0, 6, f'- Total de Inquéritos Analisados: {total_inqueritos}', 0, 1)
-        pdf.cell(0, 6, f'- Satisfação Geral: {satisfacao_geral:.2f}% (Objetivo: {st.session_state.objetivo_geral:.1f}%)', 0, 1)
-        pdf.cell(0, 6, f'- Taxa de Resposta Média: {taxa_resposta_media:.2f}% (Objetivo: {st.session_state.objetivo_taxa_resp:.1f}%)', 0, 1)
-        pdf.ln(5)
-
-        # 2. Desempenho por Rubrica
-        pdf.set_font('helvetica', 'B', 12)
-        pdf.cell(0, 8, '2. Desempenho por Rubrica', 0, 1)
-        pdf.set_font('helvetica', 'B', 9)
-        pdf.cell(130, 7, 'Rubrica', 1)
-        pdf.cell(30, 7, 'Média (%)', 1, 0, 'C')
-        pdf.cell(30, 7, 'Respostas (N)', 1, 1, 'C')
-
-        pdf.set_font('helvetica', '', 9)
-        for r in resumo_rubricas:
-            nome_rub = r['Rubrica'][:65]
-            med_val = f"{r['Média']:.2f}%"
-            n_val = str(len(df_filtered[f"{r['Rubrica']}_Pct"].dropna()))
-            pdf.cell(130, 6, nome_rub, 1)
-            pdf.cell(30, 6, med_val, 1, 0, 'C')
-            pdf.cell(30, 6, n_val, 1, 1, 'C')
-        pdf.ln(5)
-
-        # 3. Análise Preditiva (Scikit-Learn)
-        pdf.set_font('helvetica', 'B', 12)
-        pdf.cell(0, 8, '3. Sumário do Modelo Preditivo (Scikit-Learn)', 0, 1)
-        pdf.set_font('helvetica', '', 10)
-        
-        try:
-            from sklearn.linear_model import LogisticRegression
-            from sklearn.model_selection import train_test_split
-            from sklearn.preprocessing import OneHotEncoder
-            from sklearn.compose import ColumnTransformer
-            from sklearn.pipeline import Pipeline
-            from sklearn.metrics import accuracy_score
-
-            df_model_pdf = df_filtered.copy()
-            if "Geral_Pct_Row" not in df_model_pdf.columns:
-                df_model_pdf["Geral_Pct_Row"] = df_model_pdf[pct_rubric_cols].mean(axis=1, skipna=True)
-
-            meta_alvo = st.session_state.objetivo_geral
-            df_model_pdf["Target_Positivo"] = (df_model_pdf["Geral_Pct_Row"] >= meta_alvo).astype(int)
-            features = ["Nacionalidade", "Quarto"]
-            df_model_pdf = df_model_pdf.dropna(subset=features + ["Target_Positivo"])
-
-            if len(df_model_pdf) > 30 and df_model_pdf["Target_Positivo"].nunique() > 1:
-                X = df_model_pdf[features].astype(str)
-                y = df_model_pdf["Target_Positivo"]
-
-                preprocessor = ColumnTransformer(transformers=[("cat", OneHotEncoder(handle_unknown="ignore"), features)])
-                model = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", LogisticRegression(max_iter=1000))])
-                
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-                model.fit(X_train, y_train)
-                acc = accuracy_score(y_test, model.predict(X_test))
-
-                pdf.cell(0, 6, f'- Estado do Modelo: Treinado com sucesso ({len(X)} registos históricos)', 0, 1)
-                pdf.cell(0, 6, f'- Precisão Preditiva (Test Set): {acc * 100:.1f}%', 0, 1)
-                pdf.cell(0, 6, f'- Critério de Sucesso: Classificação global >= {meta_alvo:.0f}%', 0, 1)
-            else:
-                pdf.cell(0, 6, '- Modelo Preditivo: Dados insuficientes no período selecionado para treino fiável.', 0, 1)
-        except Exception:
-            pdf.cell(0, 6, '- Modelo Preditivo: Indisponível ou erro no carregamento da biblioteca Scikit-Learn.', 0, 1)
-
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        pdf.output(temp_file.name)
-        return temp_file.name
-
-    if st.sidebar.button("📄 Gerar Relatório Executivo (PDF)"):
-        pdf_path = generate_pdf()
-        with open(pdf_path, "rb") as pdf_file:
-            st.sidebar.download_button(
-                label="⬇️ Descarregar PDF Gerado",
-                data=pdf_file,
-                file_name="relatorio_executivo_hotel_alisios.pdf",
-                mime="application/pdf",
-            )
-        os.unlink(pdf_path)
-
-    csv_data = df_filtered.to_csv(index=False).encode("utf-8")
-    st.sidebar.download_button(
-        label="📥 Descarregar Dados Filtrados (CSV)",
-        data=csv_data,
-        file_name="relatorio_satisfacao_hotel_alisios.csv",
-        mime="text/csv",
-    )
-
-    with st.expander("Ver dados detalhados filtrados"):
-        st.dataframe(df_filtered)
-
-else:
-    st.warning("Por favor, faça o upload do seu ficheiro Excel (`.xlsx`) na barra lateral para carregar o dashboard.")
-# ---------------------------------------------------------
-# ANÁLISE DE SATISFAÇÃO POR NACIONALIDADE
-# ---------------------------------------------------------
-st.markdown("---")
-st.subheader("🌍 Comparação de Satisfação por Nacionalidade")
-st.markdown("Avaliação da satisfação média global segmentada por país de origem dos hóspedes.")
-
-if "Nacionalidade" in df_filtered.columns and not df_filtered.empty:
-    if "Geral_Pct_Row" not in df_filtered.columns:
-        df_filtered["Geral_Pct_Row"] = df_filtered[pct_rubric_cols].mean(axis=1, skipna=True)
-
-    # Agrupar por nacionalidade e calcular a média e a contagem de inquéritos
-    df_nac = df_filtered.groupby("Nacionalidade").agg(
-        Satisfacao_Media=("Geral_Pct_Row", "mean"),
-        Total_Inqueritos=("Geral_Pct_Row", "count")
-    ).reset_index().dropna(subset=["Satisfacao_Media"])
-
-    # Filtrar nacionalidades com pelo menos 1 inquérito (ou ajustar se quiser um mínimo maior)
-    df_nac = df_nac.sort_values(by="Satisfacao_Media", ascending=True)
-
-    if not df_nac.empty:
-        fig_nac = px.bar(
-            df_nac,
-            x="Satisfacao_Media",
-            y="Nacionalidade",
-            orientation="h",
-            text=df_nac["Satisfacao_Media"].apply(lambda v: f"{v:.1f}%"),
-            color="Satisfacao_Media",
-            color_continuous_scale="Blues",
-            labels={"Satisfacao_Media": "Satisfação Média Global (%)", "Nacionalidade": ""}
-        )
-        
-        # Adicionar linha vertical com a meta global atual para referência visual
-        fig_nac.add_vline(
-            x=st.session_state.objetivo_geral,
-            line_dash="dash",
-            line_color="red",
-            annotation_text=f"Meta ({st.session_state.objetivo_geral:.0f}%)",
-            annotation_position="top"
-        )
-        
-        fig_nac.update_layout(
-            height=max(350, len(df_nac) * 25),  # Ajusta dinamicamente a altura consoante o nº de nacionalidades
-            xaxis=dict(range=[0, 105]),
-            margin=dict(l=0, r=10, t=20, b=10)
-        )
-        st.plotly_chart(fig_nac, use_container_width=True)
-    else:
-        st.info("Não existem dados suficientes de nacionalidade para o período selecionado.")
-else:
-    st.info("A coluna 'Nacionalidade' não foi encontrada no ficheiro de dados.")
+                input_nacionalidade = st.selectbox("Nacionalidade do Cliente", options=nacionalidades_
